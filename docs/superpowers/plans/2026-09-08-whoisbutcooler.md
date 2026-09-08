@@ -32,7 +32,7 @@ These were verified against the real services on 2026-09-08 and **contradict the
 2. **ipwho.is signals failure with HTTP 200 and `{"success": false, "message": "..."}`.** Checking the status code alone will treat errors as successes.
 3. **The RDAP abuse entity is nested inside the registrant entity**, not at the top level. For `8.8.8.8` the top-level entity has `roles: ["registrant"]`, and the abuse contact is at `entities[0].entities[0]`. **A flat scan of top-level entities finds nothing and silently returns an empty abuse contact for every lookup.** The walk must be recursive. This is the single most likely bug in the project.
 4. The real abuse contact for `8.8.8.8` is `network-abuse@google.com`, and ipwho.is reports the city as San Jose. The spec's `abuse@google.com` / Mountain View were illustrative.
-5. Natural Earth 110m land is 127 polygons totalling 5,143 coordinate pairs — about 41KB as packed `float32`.
+5. Natural Earth 110m land is 127 features but **128 rings**, totalling 5,143 coordinate pairs — about 41KB as packed `float32`. The extra ring is the Caspian Sea, cut out of the Africa-Eurasia feature. The generator emits one polyline per ring, so the count to assert is 128.
 
 ---
 
@@ -813,7 +813,7 @@ go run ./cmd/genworld -in /tmp/ne_110m_land.geojson -out internal/world/world.bi
 ls -l internal/world/world.bin
 ```
 
-Expected: `wrote 127 polylines, 5143 points`, and a file of roughly 41KB.
+Expected: `wrote 128 polylines, 5143 points`, and a file of roughly 41KB.
 
 - [ ] **Step 3: Write the failing tests**
 
@@ -832,8 +832,11 @@ import (
 
 func TestCoastlinesDecodeToExpectedShape(t *testing.T) {
 	lines := Coastlines()
-	if len(lines) != 127 {
-		t.Fatalf("got %d polylines, want 127", len(lines))
+	// 127 GeoJSON features but 128 rings: the Africa-Eurasia feature carries a
+	// second ring for the Caspian Sea, an inland water body cut out of the
+	// landmass. Its shoreline is real coastline, so it is drawn like any other.
+	if len(lines) != 128 {
+		t.Fatalf("got %d polylines, want 128", len(lines))
 	}
 	total := 0
 	for _, l := range lines {
