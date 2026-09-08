@@ -36,6 +36,11 @@ type lookupMsg struct {
 	err error
 }
 
+// LookupResult wraps a completed lookup as a message, so callers outside the
+// package (the one-shot renderer) can drive the model without running a full
+// Bubble Tea program.
+func LookupResult(res *lookup.Result) tea.Msg { return lookupMsg{res: res} }
+
 // Model is the whole application state.
 type Model struct {
 	client *lookup.Client
