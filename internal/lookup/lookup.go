@@ -109,6 +109,9 @@ func (c *Client) fetchGeo(ctx context.Context, addr netip.Addr) (*GeoData, strin
 		if err == nil && g != nil {
 			return g, p.Name(), nil
 		}
+		if err == nil {
+			err = fmt.Errorf("%s: returned no data", p.Name())
+		}
 		errs = append(errs, err)
 	}
 	if len(errs) == 0 {

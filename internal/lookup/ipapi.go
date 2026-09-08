@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/netip"
+	"strings"
 )
 
 // IPAPI queries ip-api.com. It exists only as a fallback: the free tier is
@@ -25,17 +26,17 @@ func NewIPAPI() *IPAPI {
 func (p *IPAPI) Name() string { return "ip-api.com" }
 
 type ipapiResponse struct {
-	Status     string  `json:"status"`
-	Message    string  `json:"message"`
-	Country    string  `json:"country"`
+	Status      string  `json:"status"`
+	Message     string  `json:"message"`
+	Country     string  `json:"country"`
 	CountryCode string  `json:"countryCode"`
-	RegionName string  `json:"regionName"`
-	City       string  `json:"city"`
-	Lat        float64 `json:"lat"`
-	Lon        float64 `json:"lon"`
-	Timezone   string  `json:"timezone"`
-	ISP        string  `json:"isp"`
-	AS         string  `json:"as"` // "AS15169 Google LLC"
+	RegionName  string  `json:"regionName"`
+	City        string  `json:"city"`
+	Lat         float64 `json:"lat"`
+	Lon         float64 `json:"lon"`
+	Timezone    string  `json:"timezone"`
+	ISP         string  `json:"isp"`
+	AS          string  `json:"as"` // "AS15169 Google LLC"
 }
 
 func (p *IPAPI) Fetch(ctx context.Context, ip netip.Addr) (*GeoData, error) {
@@ -71,20 +72,11 @@ func (p *IPAPI) Fetch(ctx context.Context, ip netip.Addr) (*GeoData, error) {
 	}
 	// The "as" field is "AS15169 Google LLC"; keep only the number.
 	if body.AS != "" {
-		if i := indexByte(body.AS, ' '); i > 0 {
+		if i := strings.IndexByte(body.AS, ' '); i > 0 {
 			g.ASN = body.AS[:i]
 		} else {
 			g.ASN = body.AS
 		}
 	}
 	return g, nil
-}
-
-func indexByte(s string, b byte) int {
-	for i := 0; i < len(s); i++ {
-		if s[i] == b {
-			return i
-		}
-	}
-	return -1
 }

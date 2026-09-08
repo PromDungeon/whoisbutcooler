@@ -3,6 +3,8 @@ package lookup
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"net/netip"
 	"testing"
 )
@@ -126,6 +128,29 @@ func TestLookupRejectsUnresolvableInput(t *testing.T) {
 	}
 	if _, err := c.Lookup(context.Background(), "not a real host"); err == nil {
 		t.Fatal("expected an error for unresolvable input")
+	}
+}
+
+func TestLookupSurvivesRegistryError(t *testing.T) {
+	// Registry failures must not propagate. The goroutine runs on the
+	// concurrency path, wg.Wait() synchronizes it, and the geo half renders
+	// while registry fields stay empty.
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	defer server.Close()
+
+	c := testClient(stubGeo{name: "ipwho.is", data: &GeoData{Lat: 51.5, Lon: -0.12, City: "London"}})
+	c.Registry = &RDAP{BaseURL: server.URL, HTTP: defaultHTTPClient()}
+	got, err := c.Lookup(context.Background(), "8.8.8.8")
+	if err != nil {
+		t.Fatalf("registry error propagated as fatal: %v", err)
+	}
+	if got.City != "London" || got.Lat != 51.5 {
+		t.Errorf("geo half lost: %+v", got)
+	}
+	if got.Network != "" || got.Abuse != "" {
+		t.Errorf("registry fields populated from a failed registry: %+v", got)
 	}
 }
 
