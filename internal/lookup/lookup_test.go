@@ -154,6 +154,35 @@ func TestLookupSurvivesRegistryError(t *testing.T) {
 	}
 }
 
+func TestLookupMergesRegistryFieldsIntoTheResult(t *testing.T) {
+	// Three of the seven panel lines come from here. Every other registry
+	// test asserts the fields stay *empty* -- a nil registry, or one that
+	// errors -- so deleting the merge in Lookup satisfied all of them and
+	// those three lines would have rendered as em dashes forever, on a green
+	// build. This is the only test that watches a registry succeed.
+	c := testClient(stubGeo{name: "ipwho.is", data: &GeoData{Lat: 37.34, Lon: -121.89, City: "San Jose"}})
+	c.Registry = newRDAPTest(t, 200, rdapOK)
+
+	got, err := c.Lookup(context.Background(), "8.8.8.8")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.Network != "8.8.8.0/24" {
+		t.Errorf("Network = %q, want 8.8.8.0/24", got.Network)
+	}
+	if got.NetName != "GOGL" {
+		t.Errorf("NetName = %q, want GOGL", got.NetName)
+	}
+	if got.Abuse != "network-abuse@google.com" {
+		t.Errorf("Abuse = %q, want network-abuse@google.com", got.Abuse)
+	}
+	// The geo half must survive the merge rather than being overwritten by a
+	// zero-valued registry struct.
+	if got.City != "San Jose" {
+		t.Errorf("City = %q, want San Jose", got.City)
+	}
+}
+
 func TestLookupRejectsEmptyQuery(t *testing.T) {
 	c := testClient(stubGeo{name: "ipwho.is", data: &GeoData{}})
 	if _, err := c.Lookup(context.Background(), "   "); err == nil {

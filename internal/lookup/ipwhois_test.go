@@ -75,7 +75,10 @@ func TestIPWhoisOmitsUnknownASN(t *testing.T) {
 }
 
 func TestIPWhoisRejectsNon200(t *testing.T) {
-	p := newIPWhoisTest(t, 500, `nope`)
+	// A valid success body under a 5xx: with an unparseable body this passes
+	// even with the status-code check deleted, pinning the JSON decoder
+	// rather than the check it names.
+	p := newIPWhoisTest(t, 500, ipwhoisOK)
 	if _, err := p.Fetch(context.Background(), netip.MustParseAddr("8.8.8.8")); err == nil {
 		t.Fatal("HTTP 500 was accepted")
 	}
