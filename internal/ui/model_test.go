@@ -2,6 +2,7 @@ package ui
 
 import (
 	"math"
+	"slices"
 	"strings"
 	"testing"
 
@@ -145,5 +146,92 @@ func TestDownArrowDoesNotClobberInProgressTyping(t *testing.T) {
 	after, _ := typed.Update(tea.KeyMsg{Type: tea.KeyDown})
 	if got := after.(Model).input.Value(); got != "9.9.9.9" {
 		t.Fatalf("Down destroyed in-progress input: got %q, want %q", got, "9.9.9.9")
+	}
+}
+
+// submitted returns the model that typing q at the prompt and pressing Enter
+// produces — the reference state the command-line path has to match.
+func submitted(t *testing.T, q string) Model {
+	t.Helper()
+	m := sized(New(nil, ""), 120, 34)
+	typed, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(q)})
+	entered, _ := typed.(Model).Update(tea.KeyMsg{Type: tea.KeyEnter})
+	return entered.(Model)
+}
+
+func TestInitialQueryLeavesTheSameStateAsPressingEnter(t *testing.T) {
+	// `whoisbutcooler 8.8.8.8` is the usual invocation, and Init returns only
+	// a Cmd, so whatever the Enter path records has to be recorded in New or
+	// it is simply absent. It was: r retried nothing, up recalled nothing,
+	// the prompt still held the query after the result landed, and no status
+	// said a lookup was running.
+	//
+	// Comparing against the Enter path rather than against four hardcoded
+	// values keeps the two from drifting apart again the next time one of
+	// them changes.
+	const q = "8.8.8.8"
+	want := submitted(t, q)
+	got := sized(New(nil, q), 120, 34)
+
+	if got.lastQuery != want.lastQuery {
+		t.Errorf("lastQuery = %q, want %q — r is a dead key without it", got.lastQuery, want.lastQuery)
+	}
+	if !slices.Equal(got.history, want.history) {
+		t.Errorf("history = %v, want %v — up recalls nothing without it", got.history, want.history)
+	}
+	if got.histIdx != want.histIdx {
+		t.Errorf("histIdx = %d, want %d", got.histIdx, want.histIdx)
+	}
+	if got.input.Value() != want.input.Value() {
+		t.Errorf("input = %q, want %q — the prompt should not still hold the query", got.input.Value(), want.input.Value())
+	}
+	if got.status != want.status {
+		t.Errorf("status = %q, want %q", got.status, want.status)
+	}
+	if !strings.Contains(got.status, q) {
+		t.Errorf("status %q does not say what is being looked up", got.status)
+	}
+}
+
+func TestInitialQueryIsWhatInitLooksUp(t *testing.T) {
+	// New clears the input, so Init can no longer read the query from there.
+	m := New(nil, "  8.8.8.8  ")
+	if m.Init() == nil {
+		t.Fatal("Init issued no command for a command-line query")
+	}
+	if got := New(nil, "   ").Init(); got == nil {
+		t.Fatal("Init returned no command at all without a query")
+	}
+	if m.lastQuery != "8.8.8.8" {
+		t.Fatalf("lastQuery = %q, want the trimmed query", m.lastQuery)
+	}
+}
+
+func TestRetryAfterAnInitialQueryReRunsIt(t *testing.T) {
+	// The end of the chain finding 6 is really about: r must work on the very
+	// first frame after a command-line invocation.
+	m := sized(New(nil, "8.8.8.8"), 120, 34)
+	done, _ := m.Update(lookupMsg{res: fullResult()})
+	toMap, _ := done.(Model).Update(tea.KeyMsg{Type: tea.KeyTab})
+	retried, cmd := toMap.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	if cmd == nil {
+		t.Fatal("r issued no lookup after a command-line query")
+	}
+	if got := retried.(Model).status; !strings.Contains(got, "8.8.8.8") {
+		t.Errorf("status = %q, want it to name the query being retried", got)
+	}
+	// A retry re-runs a query already in the ring; it must not push a
+	// duplicate onto it.
+	if got := retried.(Model).history; !slices.Equal(got, []string{"8.8.8.8"}) {
+		t.Errorf("history = %v, want a single entry", got)
+	}
+}
+
+func TestHistoryRecallsAnInitialQuery(t *testing.T) {
+	m := sized(New(nil, "8.8.8.8"), 120, 34)
+	done, _ := m.Update(lookupMsg{res: fullResult()})
+	recalled, _ := done.(Model).Update(tea.KeyMsg{Type: tea.KeyUp})
+	if got := recalled.(Model).input.Value(); got != "8.8.8.8" {
+		t.Fatalf("up recalled %q, want the command-line query", got)
 	}
 }

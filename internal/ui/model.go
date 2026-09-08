@@ -66,22 +66,45 @@ func New(client *lookup.Client, initialQuery string) Model {
 	in.Placeholder = "IP address or hostname"
 	in.Prompt = "› "
 	in.Focus()
-	in.SetValue(initialQuery)
 
-	return Model{
+	m := Model{
 		client: client,
 		input:  in,
 		view:   geo.World(),
 		w:      80,
 		h:      24,
 	}
+	// Init returns a Cmd and cannot mutate the model, so a query given on the
+	// command line has to be recorded here or `whoisbutcooler 8.8.8.8` — the
+	// most common invocation there is — lands in a state no key press can
+	// produce: r retries nothing, up recalls nothing, and the prompt still
+	// holds the query the panel is already showing.
+	if q := strings.TrimSpace(initialQuery); q != "" {
+		m = m.beginLookup(q, true)
+	}
+	return m
 }
 
 func (m Model) Init() tea.Cmd {
-	if strings.TrimSpace(m.input.Value()) == "" {
+	if m.lastQuery == "" {
 		return textinput.Blink
 	}
-	return tea.Batch(textinput.Blink, m.doLookup(m.input.Value()))
+	return tea.Batch(textinput.Blink, m.doLookup(m.lastQuery))
+}
+
+// beginLookup puts the model into the "a lookup is running" state for q,
+// without running it: New needs exactly this state but cannot return a
+// command. remember says whether q joins the history ring, which a retry must
+// not do — the query is already in there.
+func (m Model) beginLookup(q string, remember bool) Model {
+	if remember {
+		m.history = append(m.history, q)
+		m.histIdx = len(m.history)
+	}
+	m.lastQuery = q
+	m.status, m.isError = "Looking up "+q+"…", false
+	m.input.SetValue("")
+	return m
 }
 
 // doLookup runs the query off the render goroutine so the UI stays responsive.
@@ -190,8 +213,8 @@ func (m Model) handleMapKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "r":
 		if m.lastQuery != "" {
-			m.status, m.isError = "Looking up "+m.lastQuery+"…", false
-			return m, m.doLookup(m.lastQuery)
+			q := m.lastQuery
+			return m.beginLookup(q, false), m.doLookup(q)
 		}
 	}
 	return m, nil
@@ -204,12 +227,7 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if q == "" {
 			return m, nil
 		}
-		m.history = append(m.history, q)
-		m.histIdx = len(m.history)
-		m.lastQuery = q
-		m.status, m.isError = "Looking up "+q+"…", false
-		m.input.SetValue("")
-		return m, m.doLookup(q)
+		return m.beginLookup(q, true), m.doLookup(q)
 
 	case tea.KeyUp:
 		if m.histIdx > 0 {
