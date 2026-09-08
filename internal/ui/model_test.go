@@ -49,11 +49,19 @@ func TestSuccessfulLookupFitsViewportToPin(t *testing.T) {
 }
 
 func TestPrivateRangeErrorIsExplainedNotDumped(t *testing.T) {
+	// ErrPrivateRange's raw text already contains "private", so asserting
+	// only that would pass even if applyLookup's friendly branch were
+	// deleted. Pin wording unique to the friendly message instead, and
+	// confirm the raw error text is not what actually gets displayed.
 	m := sized(New(nil, ""), 120, 34)
 	next, _ := m.Update(lookupMsg{err: lookup.ErrPrivateRange})
-	out := next.(Model).View()
-	if !strings.Contains(strings.ToLower(out), "private") {
-		t.Fatalf("private-range error not surfaced:\n%s", out)
+	got := next.(Model)
+	out := got.View()
+	if !strings.Contains(strings.ToLower(out), "no public database can place it") {
+		t.Fatalf("private-range error not explained in friendly terms:\n%s", out)
+	}
+	if got.status == lookup.ErrPrivateRange.Error() {
+		t.Fatalf("status is the raw error text, not a friendly explanation: %q", got.status)
 	}
 }
 
@@ -117,5 +125,25 @@ func TestHistoryRecallWalksBackwards(t *testing.T) {
 	next, _ = next.(Model).Update(tea.KeyMsg{Type: tea.KeyUp})
 	if got := next.(Model).input.Value(); got != "1.1.1.1" {
 		t.Fatalf("second recall = %q", got)
+	}
+}
+
+func TestDownArrowDoesNotClobberInProgressTyping(t *testing.T) {
+	// histIdx == len(history) is the normal state at startup and after every
+	// submission — nothing has been recalled. Down must be a no-op there
+	// rather than clearing text the user is mid-typing.
+	m := sized(New(nil, ""), 120, 34)
+	m.history = []string{"1.1.1.1", "8.8.8.8"}
+	m.histIdx = len(m.history)
+
+	next, _ := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("9.9.9.9")})
+	typed := next.(Model)
+	if got := typed.input.Value(); got != "9.9.9.9" {
+		t.Fatalf("typed text = %q, want %q", got, "9.9.9.9")
+	}
+
+	after, _ := typed.Update(tea.KeyMsg{Type: tea.KeyDown})
+	if got := after.(Model).input.Value(); got != "9.9.9.9" {
+		t.Fatalf("Down destroyed in-progress input: got %q, want %q", got, "9.9.9.9")
 	}
 }

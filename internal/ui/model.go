@@ -46,7 +46,6 @@ type Model struct {
 
 	status  string
 	isError bool
-	loading bool
 
 	history []string
 	histIdx int
@@ -112,7 +111,6 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m Model) applyLookup(msg lookupMsg) Model {
-	m.loading = false
 	if msg.err != nil {
 		m.isError = true
 		if errors.Is(msg.err, lookup.ErrPrivateRange) {
@@ -187,7 +185,7 @@ func (m Model) handleMapKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	case "r":
 		if m.lastQuery != "" {
-			m.loading, m.status, m.isError = true, "Looking up "+m.lastQuery+"…", false
+			m.status, m.isError = "Looking up "+m.lastQuery+"…", false
 			return m, m.doLookup(m.lastQuery)
 		}
 	}
@@ -204,7 +202,7 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		m.history = append(m.history, q)
 		m.histIdx = len(m.history)
 		m.lastQuery = q
-		m.loading, m.status, m.isError = true, "Looking up "+q+"…", false
+		m.status, m.isError = "Looking up "+q+"…", false
 		m.input.SetValue("")
 		return m, m.doLookup(q)
 
@@ -216,10 +214,18 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyDown:
-		if m.histIdx < len(m.history)-1 {
+		// histIdx == len(history) means nothing is recalled — the normal
+		// state at startup and right after a submission. Down must leave
+		// whatever the user is typing alone rather than clearing it.
+		switch {
+		case m.histIdx >= len(m.history):
+			return m, nil
+		case m.histIdx < len(m.history)-1:
 			m.histIdx++
 			m.input.SetValue(m.history[m.histIdx])
-		} else {
+		default:
+			// Stepping past the newest recalled entry clears back to an
+			// empty prompt, since that entry was recalled text, not typed.
 			m.histIdx = len(m.history)
 			m.input.SetValue("")
 		}
