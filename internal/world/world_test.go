@@ -68,6 +68,20 @@ func TestDrawIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestDrawKeepsWideSegmentsAtTightZoom(t *testing.T) {
+	// Several degrees of longitude is ordinary coastline, not an antimeridian
+	// crossing. A guard that thresholds projected distance against canvas
+	// width conflates the two and erases real coastline as zoom tightens.
+	c := canvas.New(80, 24)
+	Draw(c, geo.Viewport{CenterLat: 72.5, CenterLon: 145.0, LonSpan: 8})
+	for _, row := range c.Render() {
+		if strings.TrimSpace(row) != "" {
+			return
+		}
+	}
+	t.Fatal("no coastline drawn at LonSpan=8 over the Siberian coast")
+}
+
 func TestDrawPinMarksTheProjectedCell(t *testing.T) {
 	c := canvas.New(80, 24)
 	v := geo.FitTo(37.34, -121.89)
