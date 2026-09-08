@@ -890,6 +890,28 @@ func TestDrawIsDeterministic(t *testing.T) {
 	}
 }
 
+func TestDrawKeepsWideSegmentsAtTightZoom(t *testing.T) {
+	// A degree of longitude is ordinary coastline, not an antimeridian
+	// crossing. A guard thresholding projected distance against canvas width
+	// conflates the two, and this viewport is chosen to prove the difference:
+	// over the West Antarctic coast at this zoom, every one of the eight
+	// visible segments exceeds half the canvas width, so such a guard renders
+	// a completely blank map here while the correct code renders twelve rows
+	// of coastline. A viewport where some segments survive the guard would
+	// pass either way and prove nothing.
+	c := canvas.New(80, 24)
+	Draw(c, geo.Viewport{CenterLat: -72.46, CenterLon: -98.82, LonSpan: 2})
+	nonBlank := 0
+	for _, row := range c.Render() {
+		if strings.TrimSpace(row) != "" {
+			nonBlank++
+		}
+	}
+	if nonBlank < 8 {
+		t.Fatalf("only %d non-blank rows at LonSpan=2 over the West Antarctic coast; want at least 8", nonBlank)
+	}
+}
+
 func TestDrawPinMarksTheProjectedCell(t *testing.T) {
 	c := canvas.New(80, 24)
 	v := geo.FitTo(37.34, -121.89)
@@ -981,6 +1003,11 @@ func decode(b []byte) [][]Point {
 // Draw rasterizes every coastline segment visible in the viewport. Segments
 // are handed to LineF unclipped; the canvas rejects the offscreen ones, which
 // is cheaper than testing visibility twice.
+//
+// There is deliberately no antimeridian special case. Project normalises each
+// endpoint's longitude relative to the viewport centre, so a segment crossing
+// the date line lands on two adjacent positions rather than opposite edges —
+// the false horizontal line it would otherwise paint cannot arise.
 func Draw(c *canvas.Canvas, v geo.Viewport) {
 	dw, dh := c.Size()
 	if dw == 0 || dh == 0 {
@@ -993,12 +1020,7 @@ func Draw(c *canvas.Canvas, v geo.Viewport) {
 		px, py, _ := v.Project(float64(line[0].Lat), float64(line[0].Lon), dw, dh)
 		for _, pt := range line[1:] {
 			x, y, _ := v.Project(float64(pt.Lat), float64(pt.Lon), dw, dh)
-			// A segment whose endpoints land on opposite edges after
-			// longitude wrapping would be drawn straight across the map.
-			// Skip those rather than painting a false horizontal line.
-			if absF(x-px) < float64(dw)/2 {
-				c.LineF(px, py, x, y, canvas.InkLand)
-			}
+			c.LineF(px, py, x, y, canvas.InkLand)
 			px, py = x, y
 		}
 	}
@@ -1022,13 +1044,6 @@ func DrawPin(c *canvas.Canvas, v geo.Viewport, lat, lon float64) bool {
 		c.Set(cx, cy+d, canvas.InkPin)
 	}
 	return true
-}
-
-func absF(f float64) float64 {
-	if f < 0 {
-		return -f
-	}
-	return f
 }
 ```
 
