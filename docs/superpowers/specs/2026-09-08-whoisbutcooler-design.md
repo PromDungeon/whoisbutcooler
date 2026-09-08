@@ -190,8 +190,8 @@ format is an awkward nested array and warrants its own tested function.
 
 ### Provider fallback
 
-If ipwho.is fails, ip-api.com is tried. Because that fallback is HTTP-only, **the panel
-displays the provider name whenever the fallback was used**, so a cleartext lookup is never
+If ipwho.is fails, ip-api.com is tried. Because that fallback is HTTP-only, **the status
+line displays the provider name whenever the fallback was used**, so a cleartext lookup is never
 silent. `GeoSource` on `Result` carries this.
 
 ### The simplified whois panel
@@ -252,7 +252,7 @@ collision between history recall and panning.
 | --- | --- |
 | Private/reserved IP (`10.x`, `192.168.x`, `127.x`, etc.) | Detected locally via `netip`, short-circuits with an explanatory message. No API call. |
 | Malformed input | Inline panel error; map holds its last good state. |
-| Geo provider timeout (5s) or error | Fall back to ip-api.com, flagged in the panel. If both fail: error plus `r` to retry. |
+| Geo provider timeout (5s) or error | Fall back to ip-api.com, flagged on the status line. If both fail: error plus `r` to retry. |
 | Rate limited | Surface the provider's own message; back off. |
 | RDAP failure | **Non-fatal.** Map and geo fields render; registry fields show an em dash. |
 | Non-TTY stdout | Render one frame, skip alt-screen, exit. |

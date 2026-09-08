@@ -17,6 +17,30 @@
 - Direct dependencies are limited to `charmbracelet/bubbletea`, `charmbracelet/bubbles`, and `charmbracelet/lipgloss`. Everything else comes from the standard library.
 - All comments explain *why*, not *what*. No comment restates the line below it.
 
+## Status: superseded in places — the code is authoritative
+
+This plan was executed, and six genuine plan-level defects were found against it during
+execution and the final review. Where the code and this document disagree, **the code is
+correct**. The known divergences, all deliberate and reviewed:
+
+1. **The coastline count is 128 polylines**, not 127. That is 127 GeoJSON features, but the
+   Africa-Eurasia feature carries a second ring for the Caspian Sea. (Synced below.)
+2. **`world.Draw` unwraps longitude per segment.** The plan first mandated a half-canvas-width
+   guard, which discarded up to 1,319 real segments at tight zoom; deleting it then left a real
+   antimeridian artifact painting false coastline across the default world view. Neither was
+   right — the shipped fix keeps consecutive vertices within 180° of each other via
+   `geo.LonDelta` / `geo.UnwrapLonDelta` / `geo.ProjectDelta`.
+3. **`strings.IndexByte` replaces the plan's hand-rolled `indexByte`.**
+4. **The `loading` field is gone** — it was written three times and never read.
+5. **`panelStyle` uses `Width(PanelWidth - 2)`**, not `- 4`: lipgloss `Width()` includes padding,
+   so `-4` made the separator rule wrap and rendered eight content lines where the spec fixes seven.
+   Panel body lines are also truncated with an ellipsis, since lipgloss wraps rather than truncates
+   and a long ISP name broke the fixed-height invariant.
+6. **UI tests assert against `Model.View()` directly** rather than using `teatest`.
+
+Three of the plan's test cases would have passed against the exact bug they claimed to pin. Treat
+the test code below as a starting point that was corrected, not as a reference.
+
 ## Deviations from the approved spec
 
 One structural change, flagged for veto:
