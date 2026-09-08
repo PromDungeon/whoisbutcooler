@@ -4,6 +4,7 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/PromDungeon/whoisbutcooler/internal/lookup"
 )
@@ -50,5 +51,38 @@ func TestPanelHeightIsConstantRegardlessOfMissingFields(t *testing.T) {
 func TestPanelIsBlankWithoutAResult(t *testing.T) {
 	if got := RenderPanel(nil, PanelWidth); strings.Contains(got, "AS") {
 		t.Fatalf("nil result rendered content: %q", got)
+	}
+}
+
+// panelLines splits a rendered panel into its lines, measured in runes rather
+// than bytes: the border and rule are drawn with multi-byte box-drawing
+// characters, so len() would overcount every one of them.
+func panelLines(rendered string) []string {
+	return strings.Split(rendered, "\n")
+}
+
+func TestPanelWidthMatchesPanelWidthConstant(t *testing.T) {
+	// mapCells() in model.go reserves exactly PanelWidth columns for this
+	// block. If the rendered block is narrower, that reservation starves the
+	// map of columns it could use; if it is wider, the layout overflows.
+	for name, res := range map[string]*lookup.Result{"full": fullResult(), "nil": nil} {
+		for _, line := range panelLines(RenderPanel(res, PanelWidth)) {
+			if w := utf8.RuneCountInString(line); w != PanelWidth {
+				t.Errorf("%s: line %q is %d columns wide, want %d", name, line, w, PanelWidth)
+			}
+		}
+	}
+}
+
+func TestPanelLineCountIsConstantAcrossAnyResult(t *testing.T) {
+	// The whole point of the fixed seven-line body is that the block's
+	// height never changes, including between no result at all and a fully
+	// populated one — not just between two populated-but-partial results,
+	// which TestPanelHeightIsConstantRegardlessOfMissingFields alone would
+	// not catch if both happened to wrap by the same amount.
+	nilLines := len(panelLines(RenderPanel(nil, PanelWidth)))
+	fullLines := len(panelLines(RenderPanel(fullResult(), PanelWidth)))
+	if nilLines != fullLines {
+		t.Fatalf("panel line count changed: nil result = %d lines, full result = %d lines", nilLines, fullLines)
 	}
 }
