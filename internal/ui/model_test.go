@@ -235,3 +235,34 @@ func TestHistoryRecallsAnInitialQuery(t *testing.T) {
 		t.Fatalf("up recalled %q, want the command-line query", got)
 	}
 }
+
+func TestRetryDoesNotClobberInProgressTyping(t *testing.T) {
+	// Same data-loss class as TestDownArrowDoesNotClobberInProgressTyping:
+	// r is aimed at the map and re-runs a query the user already submitted,
+	// so it must leave text they are mid-typing alone. Enter clearing the
+	// prompt is right — that query has moved into the history ring and the
+	// prompt is ready for the next one — but routing r through the same path
+	// borrowed a behaviour it should not have.
+	m := sized(New(nil, "8.8.8.8"), 120, 34)
+	done, _ := m.Update(lookupMsg{res: fullResult()})
+
+	typed, _ := done.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("9.9.9.9")})
+	if got := typed.(Model).input.Value(); got != "9.9.9.9" {
+		t.Fatalf("typed text = %q, want %q", got, "9.9.9.9")
+	}
+
+	// Tab only blurs the input; the value it holds survives the focus change.
+	toMap, _ := typed.(Model).Update(tea.KeyMsg{Type: tea.KeyTab})
+	retried, cmd := toMap.(Model).Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	if cmd == nil {
+		t.Fatal("r issued no lookup")
+	}
+	if got := retried.(Model).input.Value(); got != "9.9.9.9" {
+		t.Fatalf("r destroyed unsubmitted input: got %q, want %q", got, "9.9.9.9")
+	}
+	// The retry must still be of the last submitted query, not of the text
+	// sitting unsubmitted at the prompt.
+	if got := retried.(Model).lastQuery; got != "8.8.8.8" {
+		t.Errorf("lastQuery = %q, want the last submitted query", got)
+	}
+}

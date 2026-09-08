@@ -94,16 +94,22 @@ func (m Model) Init() tea.Cmd {
 
 // beginLookup puts the model into the "a lookup is running" state for q,
 // without running it: New needs exactly this state but cannot return a
-// command. remember says whether q joins the history ring, which a retry must
-// not do — the query is already in there.
-func (m Model) beginLookup(q string, remember bool) Model {
-	if remember {
+// command.
+//
+// submitted says the user handed this query over — by pressing Enter, or by
+// naming it on the command line. Two things follow from that and from nothing
+// else: q joins the history ring, and the prompt is cleared ready for the next
+// query. Retry is the case where neither holds. It re-runs a query already in
+// the ring, on a keystroke the user aimed at the map, so wiping whatever they
+// had half-typed at the prompt would be destroying input they never submitted.
+func (m Model) beginLookup(q string, submitted bool) Model {
+	if submitted {
 		m.history = append(m.history, q)
 		m.histIdx = len(m.history)
+		m.input.SetValue("")
 	}
 	m.lastQuery = q
 	m.status, m.isError = "Looking up "+q+"…", false
-	m.input.SetValue("")
 	return m
 }
 
