@@ -158,3 +158,19 @@ func TestProjectIsProjectDeltaOfLonDelta(t *testing.T) {
 		t.Fatalf("Project = (%v,%v,%v), ProjectDelta = (%v,%v,%v)", x1, y1, v1, x2, y2, v2)
 	}
 }
+
+func TestClampCentresAViewTallerThanThePlanet(t *testing.T) {
+	// This is the ordinary world view, not a corner case: at 80x24 the map is
+	// 92x84 dots, so World().LatSpan is about 328 degrees and half-span 164.
+	// There is no latitude at which such a window fits inside the poles, so
+	// the only sane answer is to centre it -- and the branch that does so runs
+	// on every world-view clamp.
+	const dotW, dotH = 92, 84
+	if half := World().LatSpan(dotW, dotH) / 2; half < 90 {
+		t.Fatalf("half-span %v is under 90; this test no longer exercises the branch", half)
+	}
+	v := Viewport{CenterLat: 47, CenterLon: 0, LonSpan: 360}.Clamp(dotW, dotH)
+	if v.CenterLat != 0 {
+		t.Fatalf("centre lat = %v, want 0 for a view taller than the planet", v.CenterLat)
+	}
+}
