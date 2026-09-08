@@ -138,14 +138,21 @@ func (m Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// ErrorMessage turns a lookup failure into the sentence a person should read.
+// Exported because the one-shot renderer reports its error itself, and a user
+// who runs --once deserves the same explanation as one at the prompt rather
+// than the raw wrapped error.
+func ErrorMessage(err error) string {
+	if errors.Is(err, lookup.ErrPrivateRange) {
+		return "That address is in a private or reserved range, so no public database can place it."
+	}
+	return err.Error()
+}
+
 func (m Model) applyLookup(msg lookupMsg) Model {
 	if msg.err != nil {
 		m.isError = true
-		if errors.Is(msg.err, lookup.ErrPrivateRange) {
-			m.status = "That address is in a private or reserved range, so no public database can place it."
-		} else {
-			m.status = msg.err.Error()
-		}
+		m.status = ErrorMessage(msg.err)
 		return m
 	}
 	m.res = msg.res

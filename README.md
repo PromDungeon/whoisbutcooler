@@ -22,6 +22,16 @@ Requires Go 1.25 or later. No API key, no signup, no configuration: geolocation 
 from [ipwho.is](https://ipwho.is) and registry data from [rdap.org](https://rdap.org),
 both free and keyless.
 
+## Where your query goes
+
+Every lookup asks two services about the address: ipwho.is for the location and
+rdap.org for the registry record, both over HTTPS. If ipwho.is is unreachable,
+geolocation falls back to [ip-api.com](https://ip-api.com), whose free tier has no TLS
+— that request, and the address in it, cross the network in cleartext. The fallback is
+never silent: whenever it answers, the status line says so, in the same frame as the
+result. Private and reserved addresses are rejected locally and never leave the
+machine.
+
 ## Usage
 
 ```sh

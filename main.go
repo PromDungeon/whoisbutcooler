@@ -91,7 +91,10 @@ func parseArgs(args []string, stdoutIsTTY bool) (query string, once bool, err er
 func renderOnce(client *lookup.Client, query string) error {
 	res, err := client.Lookup(context.Background(), query)
 	if err != nil {
-		return err
+		// Same sentence the interactive status line shows. A one-shot run is
+		// the same person asking the same question, so it should not get the
+		// raw error text where the prompt gets an explanation.
+		return errors.New(ui.ErrorMessage(err))
 	}
 	m := ui.New(client, query)
 	sized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})

@@ -1,6 +1,11 @@
 package main
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/PromDungeon/whoisbutcooler/internal/lookup"
+)
 
 func TestParseArgs(t *testing.T) {
 	cases := []struct {
@@ -36,5 +41,22 @@ func TestParseArgs(t *testing.T) {
 				t.Fatalf("got (%q, %v), want (%q, %v)", q, once, tc.wantQ, tc.wantOne)
 			}
 		})
+	}
+}
+
+func TestRenderOnceExplainsAPrivateAddressLikeThePrompt(t *testing.T) {
+	// --once used to print the raw wrapped error, "192.168.1.1: address is in
+	// a private or reserved range", while the interactive prompt explained
+	// itself. A private address is rejected before any request is made, so
+	// this touches no network.
+	err := renderOnce(&lookup.Client{}, "192.168.1.1")
+	if err == nil {
+		t.Fatal("a private address rendered as a successful lookup")
+	}
+	if !strings.Contains(err.Error(), "no public database can place it") {
+		t.Errorf("--once message = %q, want the explanation the prompt shows", err)
+	}
+	if strings.HasPrefix(err.Error(), "192.168.1.1:") {
+		t.Errorf("--once message = %q, want no raw wrapped error", err)
 	}
 }
