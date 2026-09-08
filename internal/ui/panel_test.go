@@ -20,6 +20,36 @@ func fullResult() *lookup.Result {
 	}
 }
 
+// longResult is a real-shaped result whose values are long enough to wrap:
+// a German residential IPv6 allocation. Every fixture in this file used to be
+// short enough to fit, which is why the height tests passed while the panel
+// reflowed from nine rows to thirteen on results like this one.
+func longResult() *lookup.Result {
+	return &lookup.Result{
+		Query: "2a02:8108:9640:2000:1234:5678:9abc:def0",
+		IP:    netip.MustParseAddr("2a02:8108:9640:2000:1234:5678:9abc:def0"),
+		City:  "Frankfurt am Main", Region: "Hessen",
+		Country: "Germany", CountryCode: "DE",
+		ISP: "Deutsche Telekom AG Internet Service Provider", ASN: "AS3320",
+		Timezone: "America/Argentina/ComodRivadavia",
+		Network:  "2a02:8108:9640:2000::/64", NetName: "DTAG-STATIC-IP-POOL",
+		Abuse:     "abuse-response-team@deutsche-telekom-ag.example.com",
+		GeoSource: "ipwho.is",
+	}
+}
+
+// fixtures are every result shape the panel must render at a constant height.
+func fixtures() map[string]*lookup.Result {
+	sparse := fullResult()
+	sparse.Network, sparse.NetName, sparse.Abuse, sparse.Timezone = "", "", "", ""
+	return map[string]*lookup.Result{
+		"nil":    nil,
+		"full":   fullResult(),
+		"sparse": sparse,
+		"long":   longResult(),
+	}
+}
+
 func TestPanelShowsAllSevenFacts(t *testing.T) {
 	got := RenderPanel(fullResult(), PanelWidth)
 	for _, want := range []string{
@@ -65,7 +95,7 @@ func TestPanelWidthMatchesPanelWidthConstant(t *testing.T) {
 	// mapCells() in model.go reserves exactly PanelWidth columns for this
 	// block. If the rendered block is narrower, that reservation starves the
 	// map of columns it could use; if it is wider, the layout overflows.
-	for name, res := range map[string]*lookup.Result{"full": fullResult(), "nil": nil} {
+	for name, res := range fixtures() {
 		for _, line := range panelLines(RenderPanel(res, PanelWidth)) {
 			if w := utf8.RuneCountInString(line); w != PanelWidth {
 				t.Errorf("%s: line %q is %d columns wide, want %d", name, line, w, PanelWidth)
@@ -75,14 +105,29 @@ func TestPanelWidthMatchesPanelWidthConstant(t *testing.T) {
 }
 
 func TestPanelLineCountIsConstantAcrossAnyResult(t *testing.T) {
-	// The whole point of the fixed seven-line body is that the block's
-	// height never changes, including between no result at all and a fully
-	// populated one — not just between two populated-but-partial results,
-	// which TestPanelHeightIsConstantRegardlessOfMissingFields alone would
-	// not catch if both happened to wrap by the same amount.
-	nilLines := len(panelLines(RenderPanel(nil, PanelWidth)))
-	fullLines := len(panelLines(RenderPanel(fullResult(), PanelWidth)))
-	if nilLines != fullLines {
-		t.Fatalf("panel line count changed: nil result = %d lines, full result = %d lines", nilLines, fullLines)
+	// The whole point of the fixed seven-line body is that the block's height
+	// never changes, whatever lands in it: no result at all, a partially
+	// populated one, or the long real-world values of longResult, which wrap
+	// to thirteen rows unless the body lines are truncated first. Two
+	// populated-but-short fixtures alone would not catch that, since both
+	// happen to wrap by the same amount — namely none.
+	const wantLines = 9 // 7 body rows plus the top and bottom border
+	for name, res := range fixtures() {
+		if got := len(panelLines(RenderPanel(res, PanelWidth))); got != wantLines {
+			t.Errorf("%s result rendered %d lines, want %d:\n%s",
+				name, got, wantLines, RenderPanel(res, PanelWidth))
+		}
+	}
+}
+
+func TestPanelTruncatesRatherThanDroppingTheFieldEntirely(t *testing.T) {
+	// Truncation must still leave the value recognisable: enough of the ISP
+	// name to identify the operator, and a visible mark that there is more.
+	got := RenderPanel(longResult(), PanelWidth)
+	if !strings.Contains(got, "Deutsche Telekom AG") {
+		t.Errorf("long ISP name was not shown at all:\n%s", got)
+	}
+	if !strings.Contains(got, "…") {
+		t.Errorf("truncation was not marked with an ellipsis:\n%s", got)
 	}
 }
