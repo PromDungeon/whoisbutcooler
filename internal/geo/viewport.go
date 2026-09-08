@@ -47,15 +47,42 @@ func (v Viewport) LatSpan(dotW, dotH int) float64 {
 	return v.LonSpan * float64(dotH) / float64(dotW)
 }
 
-// Project maps a coordinate to dot-space. Longitude difference is normalised
-// first so that a viewport straddling the antimeridian works without special
-// cases. visible reports whether the result lands on the canvas.
+// LonDelta is lon's signed offset from the viewport centre, wrapped into
+// [-180, 180).
+func (v Viewport) LonDelta(lon float64) float64 { return NormLon(lon - v.CenterLon) }
+
+// UnwrapLonDelta adjusts d by whole turns so that it lands within 180 degrees
+// of prev, and exists because wrapping each vertex of a polyline on its own is
+// not enough to make the antimeridian a non-event.
+//
+// Wrapping relative to the viewport centre does not remove the discontinuity,
+// it relocates it: to the centre's antipodal meridian, and to exactly +/-180,
+// where NormLon maps +180 to -180. Either one turns a one-degree coastline
+// segment into endpoints a full turn apart, which the rasterizer faithfully
+// paints as a line clean across the map. Consecutive vertices of real
+// coastline are never 180 degrees apart, so re-expressing the second endpoint
+// relative to the first removes the jump without discarding any segment --
+// unlike a distance threshold, which cannot tell the two cases apart.
+func UnwrapLonDelta(prev, d float64) float64 { return prev + NormLon(d-prev) }
+
+// Project maps a coordinate to dot-space. visible reports whether the result
+// lands on the canvas.
 func (v Viewport) Project(lat, lon float64, dotW, dotH int) (x, y float64, visible bool) {
+	return v.ProjectDelta(lat, v.LonDelta(lon), dotW, dotH)
+}
+
+// ProjectDelta is Project for a caller that has already worked out the
+// longitude offset from the viewport centre, which is how a polyline draws an
+// unwrapped run of vertices (see UnwrapLonDelta) without every package that
+// draws one growing its own copy of the projection. dLon is deliberately not
+// re-normalised: an offset outside [-180, 180) is the caller saying "past the
+// edge in this direction", and the resulting off-canvas x is what makes the
+// segment clip instead of teleport.
+func (v Viewport) ProjectDelta(lat, dLon float64, dotW, dotH int) (x, y float64, visible bool) {
 	latSpan := v.LatSpan(dotW, dotH)
 	if v.LonSpan == 0 || latSpan == 0 {
 		return 0, 0, false
 	}
-	dLon := NormLon(lon - v.CenterLon)
 	x = (dLon/v.LonSpan + 0.5) * float64(dotW)
 	// Screen y grows downward, latitude grows northward, hence the inversion.
 	y = (0.5 - (lat-v.CenterLat)/latSpan) * float64(dotH)

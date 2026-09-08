@@ -58,24 +58,26 @@ func decode(b []byte) [][]Point {
 // are handed to LineF unclipped; the canvas rejects the offscreen ones, which
 // is cheaper than testing visibility twice.
 //
-// There is deliberately no antimeridian special case. Project normalises each
-// endpoint's longitude relative to the viewport centre, so a segment crossing
-// the date line lands on two adjacent positions rather than opposite edges —
-// the false horizontal line it would otherwise paint cannot arise.
+// Each segment's far endpoint is expressed relative to its near one via
+// geo.UnwrapLonDelta rather than wrapped on its own: wrapping per vertex leaves
+// a discontinuity at the viewport's antipodal meridian and another at exactly
+// ±180 (the dataset is clipped there, so vertices sit on it), and either one
+// paints a false line clean across the map. Unwrapping is per segment, not
+// cumulative along the polyline, so a coastline that genuinely runs off one
+// edge — Antarctica does, at every centre — still re-enters at the other.
 func Draw(c *canvas.Canvas, v geo.Viewport) {
 	dw, dh := c.Size()
 	if dw == 0 || dh == 0 {
 		return
 	}
 	for _, line := range Coastlines() {
-		if len(line) < 2 {
-			continue
-		}
-		px, py, _ := v.Project(float64(line[0].Lat), float64(line[0].Lon), dw, dh)
-		for _, pt := range line[1:] {
-			x, y, _ := v.Project(float64(pt.Lat), float64(pt.Lon), dw, dh)
-			c.LineF(px, py, x, y, canvas.InkLand)
-			px, py = x, y
+		for i := 1; i < len(line); i++ {
+			a, b := line[i-1], line[i]
+			da := v.LonDelta(float64(a.Lon))
+			db := geo.UnwrapLonDelta(da, v.LonDelta(float64(b.Lon)))
+			ax, ay, _ := v.ProjectDelta(float64(a.Lat), da, dw, dh)
+			bx, by, _ := v.ProjectDelta(float64(b.Lat), db, dw, dh)
+			c.LineF(ax, ay, bx, by, canvas.InkLand)
 		}
 	}
 }

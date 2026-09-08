@@ -63,7 +63,8 @@ func TestDrawIsDeterministic(t *testing.T) {
 		Draw(c, geo.World())
 		return strings.Join(c.Render(), "\n")
 	}
-	if render() != render() {
+	first, second := render(), render()
+	if first != second {
 		t.Fatal("two identical renders differed")
 	}
 }
@@ -72,11 +73,18 @@ func TestDrawKeepsWideSegmentsAtTightZoom(t *testing.T) {
 	// A degree of longitude is ordinary coastline, not an antimeridian
 	// crossing. A guard thresholding projected distance against canvas width
 	// conflates the two, and this viewport is chosen to prove the difference:
-	// over the West Antarctic coast at this zoom, every one of the eight
-	// visible segments exceeds half the canvas width, so such a guard renders
-	// a completely blank map here while the correct code renders twelve rows
-	// of coastline. A viewport where some segments survive the guard would
+	// over the West Antarctic coast at this zoom, every visible segment
+	// exceeds half the canvas width, so such a guard renders a completely
+	// blank map here. A viewport where some segments survive the guard would
 	// pass either way and prove nothing.
+	//
+	// The threshold is the exact measured row count, not a margin: this
+	// viewport's rendering is deterministic, and it is unchanged — byte for
+	// byte — by the per-segment longitude unwrapping in Draw, because its
+	// antipodal meridian crosses Antarctica some six degrees north of the
+	// 1.2-degree latitude band this viewport can see, so every segment there
+	// is rejected on y before longitude matters. Every one of these twelve
+	// rows is genuine coastline; none is an antimeridian artifact.
 	c := canvas.New(80, 24)
 	Draw(c, geo.Viewport{CenterLat: -72.46, CenterLon: -98.82, LonSpan: 2})
 	nonBlank := 0
@@ -85,8 +93,77 @@ func TestDrawKeepsWideSegmentsAtTightZoom(t *testing.T) {
 			nonBlank++
 		}
 	}
-	if nonBlank < 8 {
-		t.Fatalf("only %d non-blank rows at LonSpan=2 over the West Antarctic coast; want at least 8", nonBlank)
+	if nonBlank < 12 {
+		t.Fatalf("only %d non-blank rows at LonSpan=2 over the West Antarctic coast; want at least 12", nonBlank)
+	}
+}
+
+// longestInkRun returns the length of the longest run of consecutive inked
+// cells in a rendered row.
+func longestInkRun(row string) int {
+	best, cur := 0, 0
+	for _, r := range row {
+		if r == ' ' {
+			cur = 0
+			continue
+		}
+		cur++
+		if cur > best {
+			best = cur
+		}
+	}
+	return best
+}
+
+// reachesBelow60S reports whether cell row lies even partly south of 60°S,
+// the only latitude band where a genuine coastline encircles the globe and so
+// the only place a full-width row of ink can be honest.
+func reachesBelow60S(v geo.Viewport, row, dotW, dotH int) bool {
+	bottom := float64((row + 1) * canvas.DotsY)
+	lat := v.CenterLat - (bottom/float64(dotH)-0.5)*v.LatSpan(dotW, dotH)
+	return lat < -60
+}
+
+func TestDrawPaintsNoFullWidthStreak(t *testing.T) {
+	// The antimeridian artifact renders as a line straight across the map: a
+	// segment whose endpoints wrap to opposite edges is rasterized through
+	// every column between them. Nothing else in the dataset can produce a
+	// solid edge-to-edge run outside the far south, so an almost-full-width
+	// run of ink in these viewports is the artifact and nothing else.
+	//
+	// Antarctica really does span every longitude, and at a tight southern
+	// zoom a full row of ink is correct — hence the 60°S exclusion, which is
+	// a property of the check rather than of these particular views. It costs
+	// nothing here: the artifact rows this test was written against (three at
+	// the world view, two at San Jose, two at London, one at Bangalore) all
+	// fall north of it.
+	//
+	// 46x21 cells is the map area of an 80x24 terminal, the smallest layout
+	// the UI supports and the one where a streak does the most damage.
+	const mapW, mapH = 46, 21
+	views := map[string]geo.Viewport{
+		"world":     geo.World(),
+		"san jose":  geo.FitTo(37.34, -121.89),
+		"london":    geo.FitTo(51.5, -0.12),
+		"bangalore": geo.FitTo(12.97, 77.59),
+	}
+	for name, v := range views {
+		c := canvas.New(mapW, mapH)
+		dotW, dotH := c.Size()
+		v = v.Clamp(dotW, dotH)
+		Draw(c, v)
+		for i, row := range c.Render() {
+			if reachesBelow60S(v, i, dotW, dotH) {
+				continue
+			}
+			// Well under mapW: the artifact is clipped to the canvas edges and
+			// may lose a cell or two at either end to rounding, so demanding a
+			// literally complete row would let a near-miss through.
+			if run := longestInkRun(row); run >= mapW-4 {
+				t.Errorf("%s: row %d has a %d-cell run of ink across a %d-cell map:\n%s",
+					name, i, run, mapW, row)
+			}
+		}
 	}
 }
 
