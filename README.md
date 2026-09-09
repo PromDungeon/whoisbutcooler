@@ -4,6 +4,8 @@ A terminal UI for IP address lookups. Type an IP or hostname and it draws a brai
 world map, drops a pin on the address's geolocated position, and shows a seven-line
 summary of the registry data that actually matters — not raw `whois` output.
 
+<img width="967" height="765" alt="Screenshot 2026-09-09 at 10 16 13 AM" src="https://github.com/user-attachments/assets/195adb89-b096-407b-9e59-6a4bd03693d9" />
+
 ## Why
 
 `whois` buries the four things <em>most</em> people(me) want 95% of the time — 
