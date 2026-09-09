@@ -22,7 +22,16 @@ graphics protocol support.
 
 ## Install
 
-Grab prebuilt binary from the
+On macOS or Linux, via Homebrew:
+
+```sh
+brew install PromDungeon/tap/whoisbutcooler
+```
+
+`brew upgrade` keeps it current after that. It installs a prebuilt binary rather
+than building from source, so there is no Go toolchain involved.
+
+Or grab a prebuilt binary from the
 [latest release](https://github.com/PromDungeon/whoisbutcooler/releases/latest) — macOS,
 Linux and Windows, on both Intel and ARM, no Go toolchain needed. Unpack it and put
 `whoisbutcooler` anywhere on your `PATH`:
