@@ -158,7 +158,7 @@ func (c *Canvas) LineF(x0, y0, x1, y1 float64, ink Ink) {
 	if dw == 0 || dh == 0 {
 		return
 	}
-	if math.IsNaN(x0) || math.IsNaN(y0) || math.IsNaN(x1) || math.IsNaN(y1) {
+	if !finite(x0) || !finite(y0) || !finite(x1) || !finite(y1) {
 		return
 	}
 	xmax, ymax := float64(dw-1), float64(dh-1)
@@ -193,6 +193,12 @@ func (c *Canvas) LineF(x0, y0, x1, y1 float64, ink Ink) {
 	}
 	c.Line(int(math.Round(x0)), int(math.Round(y0)), int(math.Round(x1)), int(math.Round(y1)), ink)
 }
+
+// finite rejects NaN and either infinity. An infinite endpoint is worse than
+// it looks: subtracting infinities inside the clip yields NaN, NaN compares
+// false against every bound so outCode calls it inside, and the segment then
+// reaches Bresenham as a coordinate near the smallest int.
+func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
 
 func abs(n int) int {
 	if n < 0 {

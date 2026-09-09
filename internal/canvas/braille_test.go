@@ -1,8 +1,11 @@
 package canvas
 
 import (
+	"math"
+	"slices"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestEmptyCellRendersSpaceNotBlankBraille(t *testing.T) {
@@ -100,5 +103,104 @@ func TestLineFDrawsClippedCrossingSegment(t *testing.T) {
 	rows := c.Render()
 	if strings.TrimSpace(rows[1]) == "" {
 		t.Fatalf("crossing segment drew nothing: %q", rows)
+	}
+}
+
+// The dot sets below are derived by hand from the line, not read back from
+// this package, so they check the rasterizer rather than describe it. Each
+// case names the reasoning that produced it.
+func TestLineRasterizesExactGeometry(t *testing.T) {
+	cases := []struct {
+		name           string
+		w, h           int
+		x0, y0, x1, y1 int
+		want           []string
+		why            string
+	}{
+		{
+			name: "horizontal", w: 3, h: 1, x0: 0, y0: 0, x1: 5, y1: 0,
+			want: []string{"⠉⠉⠉"},
+			why:  "dots (0..5,0); each cell holds an even x (0x01) and an odd x (0x08) = 0x09",
+		},
+		{
+			name: "vertical", w: 1, h: 1, x0: 0, y0: 0, x1: 0, y1: 3,
+			want: []string{"⡇"},
+			why:  "dots (0,0..3) in column 0 = 0x01|0x02|0x04|0x40 = 0x47",
+		},
+		{
+			name: "45 degree diagonal", w: 2, h: 1, x0: 0, y0: 0, x1: 3, y1: 3,
+			want: []string{"⠑⢄"},
+			why:  "dots (0,0),(1,1),(2,2),(3,3); cell0 = 0x01|0x10, cell1 = 0x04|0x80",
+		},
+		{
+			name: "steep 1:2", w: 1, h: 1, x0: 0, y0: 0, x1: 1, y1: 2,
+			want: []string{"⠱"},
+			why:  "ideal x per y is 0,0.5,1 rounded up = 0,1,1; dots (0,0),(1,1),(1,2) = 0x01|0x10|0x20",
+		},
+		{
+			name: "shallow 5:1", w: 3, h: 1, x0: 0, y0: 0, x1: 5, y1: 1,
+			want: []string{"⠉⠑⠒"},
+			why:  "ideal y runs 0,.2,.4,.6,.8,1 so it steps at x=3 with no tie to break",
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := New(tc.w, tc.h)
+			c.Line(tc.x0, tc.y0, tc.x1, tc.y1, InkLand)
+			got := c.Render()
+			if !slices.Equal(got, tc.want) {
+				t.Fatalf("Line(%d,%d,%d,%d) = %q, want %q\n  %s",
+					tc.x0, tc.y0, tc.x1, tc.y1, got, tc.want, tc.why)
+			}
+		})
+	}
+}
+
+func TestLineBreaksTiesUpward(t *testing.T) {
+	// From (0,0) to (2,1) the ideal y at x=1 is exactly 0.5, so rounding could
+	// go either way and both results are legitimate lines. This pins the
+	// round-half-up convention the rest of the map is drawn with, so a change
+	// to the tie-break shows up here rather than as coastline that shifts by a
+	// dot for reasons nobody can find.
+	c := New(2, 1)
+	c.Line(0, 0, 2, 1, InkLand)
+	if got, want := c.Render(), []string{"⠑⠂"}; !slices.Equal(got, want) {
+		t.Fatalf("tie broke downward: got %q, want %q (dots (0,0),(1,1),(2,1))", got, want)
+	}
+}
+
+func TestLineAlwaysLightsBothEndpoints(t *testing.T) {
+	for _, tc := range [][4]int{{0, 0, 5, 3}, {5, 3, 0, 0}, {0, 3, 5, 0}, {3, 0, 3, 3}, {2, 2, 2, 2}} {
+		c := New(3, 1)
+		c.Line(tc[0], tc[1], tc[2], tc[3], InkLand)
+		for _, p := range [][2]int{{tc[0], tc[1]}, {tc[2], tc[3]}} {
+			if c.InkAt(p[0]/DotsX, p[1]/DotsY) == InkNone {
+				t.Errorf("Line%v left endpoint (%d,%d) unlit", tc, p[0], p[1])
+			}
+		}
+	}
+}
+
+func TestLineFIgnoresInfiniteEndpoints(t *testing.T) {
+	// Inf minus Inf is NaN, and outCode reads NaN as inside, so an infinite
+	// endpoint slips past the clip and reaches Bresenham as a coordinate near
+	// the smallest int — which it then walks one dot at a time. That hangs the
+	// render rather than failing it, so assert on returning at all.
+	c := New(4, 2)
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		c.LineF(math.Inf(-1), math.Inf(-1), math.Inf(1), 2, InkLand)
+		c.LineF(0, 0, math.Inf(1), math.Inf(1), InkLand)
+	}()
+	select {
+	case <-done:
+	case <-time.After(2 * time.Second):
+		t.Fatal("LineF did not return on infinite endpoints")
+	}
+	for _, row := range c.Render() {
+		if strings.TrimSpace(row) != "" {
+			t.Fatalf("an infinite segment drew %q", row)
+		}
 	}
 }

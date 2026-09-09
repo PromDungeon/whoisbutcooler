@@ -4,9 +4,9 @@ import (
 	"net/netip"
 	"strings"
 	"testing"
-	"unicode/utf8"
 
 	"github.com/PromDungeon/whoisbutcooler/internal/lookup"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func fullResult() *lookup.Result {
@@ -39,6 +39,17 @@ func longResult() *lookup.Result {
 }
 
 // fixtures are every result shape the panel must render at a constant height.
+// wideGlyphResult carries a city whose glyphs occupy two terminal columns
+// each. Rune count and column count agree for Latin text and diverge here, so
+// this is what tells the two apart.
+func wideGlyphResult() *lookup.Result {
+	r := fullResult()
+	r.City = "東京都渋谷区"
+	r.Region = "東京"
+	r.ISP = "日本電信電話株式会社"
+	return r
+}
+
 func fixtures() map[string]*lookup.Result {
 	sparse := fullResult()
 	sparse.Network, sparse.NetName, sparse.Abuse, sparse.Timezone = "", "", "", ""
@@ -47,6 +58,7 @@ func fixtures() map[string]*lookup.Result {
 		"full":   fullResult(),
 		"sparse": sparse,
 		"long":   longResult(),
+		"wide":   wideGlyphResult(),
 	}
 }
 
@@ -85,8 +97,9 @@ func TestPanelIsBlankWithoutAResult(t *testing.T) {
 }
 
 // panelLines splits a rendered panel into its lines, measured in runes rather
-// than bytes: the border and rule are drawn with multi-byte box-drawing
-// characters, so len() would overcount every one of them.
+// than bytes, and in terminal columns rather than runes: the border and rule
+// are multi-byte box-drawing characters, so len() overcounts them, while a
+// CJK city name occupies two columns per rune, so a rune count undercounts it.
 func panelLines(rendered string) []string {
 	return strings.Split(rendered, "\n")
 }
@@ -97,7 +110,7 @@ func TestPanelWidthMatchesPanelWidthConstant(t *testing.T) {
 	// map of columns it could use; if it is wider, the layout overflows.
 	for name, res := range fixtures() {
 		for _, line := range panelLines(RenderPanel(res, PanelWidth)) {
-			if w := utf8.RuneCountInString(line); w != PanelWidth {
+			if w := lipgloss.Width(line); w != PanelWidth {
 				t.Errorf("%s: line %q is %d columns wide, want %d", name, line, w, PanelWidth)
 			}
 		}
