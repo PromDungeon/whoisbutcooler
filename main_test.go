@@ -113,3 +113,24 @@ func TestVersionHasADefaultForLdflagsToOverwrite(t *testing.T) {
 		t.Fatal("version is empty")
 	}
 }
+
+func TestResolveVersionPrefersTheLdflagsStamp(t *testing.T) {
+	// A goreleaser build stamps the exact release version, which is more
+	// specific than anything the module graph knows.
+	defer func(old string) { version = old }(version)
+	version = "v1.2.3"
+	if got := resolveVersion(); got != "v1.2.3" {
+		t.Fatalf("resolveVersion = %q, want the stamped v1.2.3", got)
+	}
+}
+
+func TestResolveVersionFallsBackRatherThanReportingDev(t *testing.T) {
+	// `go install module@v0.1.0` produces an unstamped binary that still knows
+	// its module version. Reporting "dev" there would be wrong, and that is
+	// the install path the README tells people to use.
+	defer func(old string) { version = old }(version)
+	version = "dev"
+	if got := resolveVersion(); got == "" {
+		t.Fatal("resolveVersion returned empty")
+	}
+}

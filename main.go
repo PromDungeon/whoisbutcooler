@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"runtime/debug"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/mattn/go-isatty"
@@ -36,6 +37,22 @@ var (
 // empty so an unstamped build says what it is instead of printing nothing.
 var version = "dev"
 
+// resolveVersion prefers the release stamp, then the module version the Go
+// toolchain records. `go install module@v0.1.0` produces an unstamped binary
+// that nonetheless knows exactly which version it is, and that is the install
+// path the README points at, so reporting "dev" there would be wrong.
+func resolveVersion() string {
+	if version != "dev" {
+		return version
+	}
+	if info, ok := debug.ReadBuildInfo(); ok {
+		if v := info.Main.Version; v != "" && v != "(devel)" {
+			return v
+		}
+	}
+	return version
+}
+
 func main() {
 	stdoutIsTTY := isTerminal(os.Stdout)
 	query, once, err := parseArgs(os.Args[1:], stdoutIsTTY)
@@ -44,7 +61,7 @@ func main() {
 		return
 	}
 	if errors.Is(err, errVersion) {
-		fmt.Println(version)
+		fmt.Println(resolveVersion())
 		return
 	}
 	if err != nil {
