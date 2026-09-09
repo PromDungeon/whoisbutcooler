@@ -95,9 +95,11 @@ func DrawBorders(c *canvas.Canvas, v geo.Viewport) {
 //
 // Each segment's far endpoint is expressed relative to its near one via
 // geo.UnwrapLonDelta rather than wrapped on its own: wrapping per vertex leaves
-// a discontinuity at the viewport's antipodal meridian and another at exactly
-// ±180 (the datasets are clipped there, so vertices sit on it), and either one
-// paints a false line clean across the map. Unwrapping is per segment, not
+// a discontinuity at the viewport's antipodal meridian, and another at exactly
+// ±180 for the coastline, which is clipped there and so has vertices sitting on
+// it. Either one paints a false line clean across the map. (The border data
+// spans only -141 to +141, so the ±180 half does not arise for it — but it runs
+// through the same code, and the antipodal half applies to both.) Unwrapping is per segment, not
 // cumulative along the line, so a coastline that genuinely runs off one edge —
 // Antarctica does, at every centre — still re-enters at the other.
 //

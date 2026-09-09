@@ -1,5 +1,6 @@
-// Command genworld converts a Natural Earth land GeoJSON file into the compact
-// binary polyline format embedded by internal/world. It is committed so the
+// Command genworld converts a Natural Earth GeoJSON file — land polygons or
+// boundary lines — into the compact binary polyline format embedded by
+// internal/world. It is committed so the
 // derivation is reproducible, but it runs rarely: coastlines do not move.
 //
 // Usage:
@@ -27,7 +28,7 @@ type featureCollection struct {
 }
 
 func main() {
-	in := flag.String("in", "", "path to Natural Earth land GeoJSON")
+	in := flag.String("in", "", "path to a Natural Earth land or boundary GeoJSON")
 	out := flag.String("out", "", "path to write the binary blob")
 	flag.Parse()
 	if *in == "" || *out == "" {

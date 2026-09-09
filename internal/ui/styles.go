@@ -30,8 +30,11 @@ var (
 			Bold(true)
 	// Borders are context rather than the subject, so they sit below both the
 	// amber coastline and the cyan pin in weight as well as in ink precedence.
+	// Darker on a light terminal and lighter on a dark one, matching the other
+	// adaptive pairs here: the reverse reads at 3.5:1 on white, under the 4.5:1
+	// the rest of this palette clears.
 	borderStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "245", Dark: "242"})
+			Foreground(lipgloss.AdaptiveColor{Light: "242", Dark: "245"})
 	labelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	valueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	titleStyle = lipgloss.NewStyle().

@@ -1,6 +1,7 @@
 package world
 
 import (
+	"math"
 	"strings"
 	"testing"
 
@@ -250,31 +251,81 @@ func TestDrawBordersRespectsTheZoomGate(t *testing.T) {
 	}
 }
 
-func TestDrawBordersPaintsNoFullWidthStreak(t *testing.T) {
-	// Borders go through the same per-segment longitude unwrapping as the
-	// coastline, and the coastline shipped an antimeridian bug that painted a
-	// line clean across the map. The same assertion has to cover this layer.
-	const mapW, mapH = 46, 21
-	views := map[string]geo.Viewport{
-		"europe":   {CenterLat: 50, CenterLon: 10, LonSpan: BorderMaxSpan},
-		"pacific":  {CenterLat: 0, CenterLon: 180, LonSpan: BorderMaxSpan},
-		"berlin":   geo.FitTo(52.5, 13.4),
-		"far east": geo.FitTo(66, 179),
-	}
-	for name, v := range views {
-		c := canvas.New(mapW, mapH)
-		dotW, dotH := c.Size()
-		v = v.Clamp(dotW, dotH)
-		DrawBorders(c, v)
-		for i, row := range c.Render() {
-			if reachesBelow60S(v, i, dotW, dotH) {
-				continue
-			}
-			if run := longestInkRun(row); run >= mapW-4 {
-				t.Errorf("%s: row %d has a %d-cell run of ink across a %d-cell map:\n%s",
-					name, i, run, mapW, row)
+func TestBorderUnwrappingMatchesTheTrueLongitudeDifference(t *testing.T) {
+	// Tests the mechanism instead of a symptom. A full-width-streak check is a
+	// proxy, and a leaky one for borders: the US-Canada boundary runs straight
+	// along the 49th parallel for 28 degrees, so at a tight zoom it fills the
+	// map legitimately — a Billings, Montana lookup plus one keypress produces
+	// a 45-cell run on a 46-cell map with nothing wrong. Asserting on run
+	// length would fail on correct output.
+	//
+	// What actually has to hold is that the unwrapped delta is the true
+	// minimal signed difference between the two longitudes, whatever the
+	// viewport centre. That is exact and has no false positives.
+	//
+	// Note what this does and does not pin: it exercises geo.UnwrapLonDelta
+	// against every segment of both real datasets, so a "simplification" of
+	// that function fails here. It does not prove drawPolylines calls it —
+	// TestDrawPaintsNoFullWidthStreak and TestBordersDrawNothingWhereThereIsNoBorderData
+	// cover the call site, one per layer.
+	centres := []float64{-180, -135, -90, -45, 0, 45, 90, 135, 179.9}
+	layers := map[string][][]Point{"coastline": Coastlines(), "borders": Borders()}
+	for name, lines := range layers {
+		for _, centre := range centres {
+			v := geo.Viewport{CenterLon: centre, LonSpan: 60}
+			for i, line := range lines {
+				for j := 1; j < len(line); j++ {
+					a, b := line[j-1], line[j]
+					da := v.LonDelta(float64(a.Lon))
+					db := geo.UnwrapLonDelta(da, v.LonDelta(float64(b.Lon)))
+					want := geo.NormLon(float64(b.Lon) - float64(a.Lon))
+					if got := db - da; math.Abs(got-want) > 1e-4 {
+						t.Fatalf("%s centre %v line %d segment %d: unwrapped delta %v, true difference %v",
+							name, centre, i, j, got, want)
+					}
+				}
 			}
 		}
+	}
+}
+
+func TestBordersDrawNothingWhereThereIsNoBorderData(t *testing.T) {
+	// The dataset holds no boundary anywhere near the Bering Strait, so any
+	// ink at all in this viewport is ink put somewhere it does not belong —
+	// which is precisely what a broken longitude unwrapping produces. A canary
+	// for false ink, not a check that anything renders.
+	c := canvas.New(46, 21)
+	DrawBorders(c, geo.FitTo(66, 179))
+	if got := inkedCells(c); got != 0 {
+		t.Fatalf("drew %d cells where the dataset has no borders:\n%s",
+			got, strings.Join(c.Render(), "\n"))
+	}
+}
+
+func TestDrawBordersUsesTheBorderInk(t *testing.T) {
+	// The entire reason borders are a separate layer is that drawing them in
+	// the coastline's ink makes a border indistinguishable from a shoreline,
+	// which is the unreadable map this feature exists to avoid. Nothing else
+	// in the suite pins which ink this function draws with.
+	c := canvas.New(60, 20)
+	DrawBorders(c, geo.Viewport{CenterLat: 45, CenterLon: -100, LonSpan: 60})
+	border, other := 0, 0
+	for row := 0; row < 20; row++ {
+		for col := 0; col < 60; col++ {
+			switch c.InkAt(col, row) {
+			case canvas.InkNone:
+			case canvas.InkBorder:
+				border++
+			default:
+				other++
+			}
+		}
+	}
+	if border == 0 {
+		t.Fatal("DrawBorders lit no cell with InkBorder")
+	}
+	if other != 0 {
+		t.Fatalf("%d cells carry an ink other than InkBorder", other)
 	}
 }
 

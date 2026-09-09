@@ -111,11 +111,15 @@ of code this change already touches.
 
 ### Styling
 
-`borderStyle` is `lipgloss.AdaptiveColor{Light: "245", Dark: "242"}` — a mid
+`borderStyle` is `lipgloss.AdaptiveColor{Light: "242", Dark: "245"}` — a mid
 grey that recedes against the amber coastline (Dark 214) and the cyan pin (Dark
 87), on both light and dark terminals. Dimmer than either, deliberately: borders
-are context, not the subject. Tunable in one line if it reads too faint in
-practice. `colorize` currently branches
+are context, not the subject.
+
+Darker on a light terminal and lighter on a dark one, matching the other adaptive
+pairs. An earlier revision of this spec had the pair the wrong way round, which
+measured 3.5:1 on white — below the 4.5:1 the rest of the palette clears — where
+this ordering gives 5.3:1 and 6.1:1. `colorize` currently branches
 pin-or-land; it becomes a lookup from ink to style so a fourth ink does not mean
 a third branch.
 
