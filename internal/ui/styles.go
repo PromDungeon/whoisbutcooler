@@ -11,16 +11,19 @@ const missing = "—"
 
 var (
 	// Coastline is amber: a tertiary hue bright enough to read at braille
-	// density, and far enough around the wheel from the magenta pin that the
-	// pin still reads as the one thing that matters. The original slate 60
+	// density. The cyan pin sits opposite it on the wheel, so the pin still
+	// reads as the one thing that matters. The original slate 60
 	// (#5f5f87) sat barely above a dark terminal background. Adaptive because
 	// a value bright enough for a dark terminal washes out on a light one.
 	// Other tertiary casts, if you want a different look: turquoise {30, 80},
 	// chartreuse {64, 155}, violet {92, 141}.
 	landStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "172", Dark: "214"})
+	// The pin is cyan: near-complementary to the amber coastline, so it
+	// separates by hue rather than relying on brightness alone at the one
+	// or two cells it occupies.
 	pinStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "162", Dark: "213"}).
+			Foreground(lipgloss.AdaptiveColor{Light: "37", Dark: "87"}).
 			Bold(true)
 	labelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	valueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
