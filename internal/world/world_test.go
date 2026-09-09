@@ -187,3 +187,103 @@ func TestDrawPinReportsOffscreen(t *testing.T) {
 		t.Fatal("a pin far outside a 4-degree viewport reported visible")
 	}
 }
+
+func TestBordersDecodeToExpectedShape(t *testing.T) {
+	lines := Borders()
+	if len(lines) != 333 {
+		t.Fatalf("got %d polylines, want 333", len(lines))
+	}
+	total := 0
+	for _, l := range lines {
+		total += len(l)
+	}
+	if total != 3108 {
+		t.Fatalf("got %d points, want 3108", total)
+	}
+}
+
+func TestBorderCoordinatesAreInRange(t *testing.T) {
+	for i, l := range Borders() {
+		for j, p := range l {
+			if p.Lon < -180 || p.Lon > 180 || p.Lat < -90 || p.Lat > 90 {
+				t.Fatalf("polyline %d point %d out of range: %+v", i, j, p)
+			}
+		}
+	}
+}
+
+func inkedCells(c *canvas.Canvas) int {
+	n := 0
+	for _, row := range c.Render() {
+		for _, r := range row {
+			if r != ' ' {
+				n++
+			}
+		}
+	}
+	return n
+}
+
+func TestDrawBordersRespectsTheZoomGate(t *testing.T) {
+	// At the two widest rungs the map is being used to orient, and borders
+	// there add ink without adding legibility. Centred on Europe, where there
+	// is plenty of border to draw at any of these spans.
+	cases := []struct {
+		span float64
+		want bool
+	}{
+		{360, false},
+		{240, false},
+		{BorderMaxSpan, true},
+		{60, true},
+		{30, true},
+	}
+	for _, tc := range cases {
+		c := canvas.New(60, 20)
+		v := geo.Viewport{CenterLat: 50, CenterLon: 10, LonSpan: tc.span}
+		dw, dh := c.Size()
+		DrawBorders(c, v.Clamp(dw, dh))
+		drew := inkedCells(c) > 0
+		if drew != tc.want {
+			t.Errorf("LonSpan %.0f: drew=%v, want %v", tc.span, drew, tc.want)
+		}
+	}
+}
+
+func TestDrawBordersPaintsNoFullWidthStreak(t *testing.T) {
+	// Borders go through the same per-segment longitude unwrapping as the
+	// coastline, and the coastline shipped an antimeridian bug that painted a
+	// line clean across the map. The same assertion has to cover this layer.
+	const mapW, mapH = 46, 21
+	views := map[string]geo.Viewport{
+		"europe":   {CenterLat: 50, CenterLon: 10, LonSpan: BorderMaxSpan},
+		"pacific":  {CenterLat: 0, CenterLon: 180, LonSpan: BorderMaxSpan},
+		"berlin":   geo.FitTo(52.5, 13.4),
+		"far east": geo.FitTo(66, 179),
+	}
+	for name, v := range views {
+		c := canvas.New(mapW, mapH)
+		dotW, dotH := c.Size()
+		v = v.Clamp(dotW, dotH)
+		DrawBorders(c, v)
+		for i, row := range c.Render() {
+			if reachesBelow60S(v, i, dotW, dotH) {
+				continue
+			}
+			if run := longestInkRun(row); run >= mapW-4 {
+				t.Errorf("%s: row %d has a %d-cell run of ink across a %d-cell map:\n%s",
+					name, i, run, mapW, row)
+			}
+		}
+	}
+}
+
+func TestDrawStillWorksAfterTheExtraction(t *testing.T) {
+	// Draw's segment loop moves into drawPolylines in this task. Coastline
+	// output must not shift as a result.
+	c := canvas.New(60, 20)
+	Draw(c, geo.World())
+	if got := inkedCells(c); got < 100 {
+		t.Fatalf("world coastline rendered only %d inked cells", got)
+	}
+}
