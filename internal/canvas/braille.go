@@ -7,11 +7,13 @@ import "math"
 
 // Ink identifies what was drawn into a cell. Higher values win when two inks
 // land in the same cell, because a terminal cell carries only one foreground
-// color and the pin must not be swallowed by coastline.
+// color. The order encodes which fact matters more where two overlap: a
+// national border yields to a shoreline, and the pin yields to nothing.
 type Ink uint8
 
 const (
 	InkNone Ink = iota
+	InkBorder
 	InkLand
 	InkPin
 )

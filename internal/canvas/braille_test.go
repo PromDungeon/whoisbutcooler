@@ -72,13 +72,30 @@ func TestSetOutOfRangeIsNoOp(t *testing.T) {
 }
 
 func TestHigherInkWinsWithinACell(t *testing.T) {
-	// A terminal cell carries one foreground color, so the pin must survive
-	// sharing a cell with coastline.
-	c := New(1, 1)
-	c.Set(0, 0, InkPin)
-	c.Set(1, 1, InkLand)
-	if got := c.InkAt(0, 0); got != InkPin {
-		t.Fatalf("InkAt = %v, want InkPin", got)
+	// A terminal cell carries one foreground color, so when two things share
+	// a cell exactly one of them decides its color. The order is deliberate:
+	// a border loses to coastline because a shoreline is the more important
+	// fact, and the pin loses to nothing.
+	cases := []struct {
+		name                string
+		first, second, want Ink
+	}{
+		{"land over border", InkBorder, InkLand, InkLand},
+		{"border under land, drawn in the other order", InkLand, InkBorder, InkLand},
+		{"pin over land", InkLand, InkPin, InkPin},
+		{"pin over border", InkBorder, InkPin, InkPin},
+		{"pin survives being drawn first", InkPin, InkLand, InkPin},
+		{"border over nothing", InkNone, InkBorder, InkBorder},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c := New(1, 1)
+			c.Set(0, 0, tc.first)
+			c.Set(1, 1, tc.second)
+			if got := c.InkAt(0, 0); got != tc.want {
+				t.Fatalf("InkAt = %v, want %v", got, tc.want)
+			}
+		})
 	}
 }
 
