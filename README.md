@@ -75,6 +75,13 @@ The coastlines are Natural Earth 110m land polygons (public domain), embedded in
 binary and reduced to polylines at build time — no download or database needed at
 runtime.
 
+National borders come from Natural Earth's 110m admin_0 boundary lines, also public
+domain, in a second 26KB blob. They are drawn in a dimmer grey beneath the coastline,
+and only once the view is a continental one or tighter — about 120 degrees of longitude
+across. Above that the map is being used to orient rather than to read a region, and
+borders there cost ink without adding legibility. Every lookup lands well inside the
+threshold, so in practice you see them whenever there is something to see.
+
 ## Not included
 
 Raw `whois` passthrough, bulk or batch lookups, live traffic monitoring, and offline

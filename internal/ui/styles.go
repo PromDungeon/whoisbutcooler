@@ -1,6 +1,9 @@
 package ui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/PromDungeon/whoisbutcooler/internal/canvas"
+	"github.com/charmbracelet/lipgloss"
+)
 
 // PanelWidth is fixed so the map area does not resize between lookups.
 const PanelWidth = 34
@@ -25,6 +28,10 @@ var (
 	pinStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "37", Dark: "87"}).
 			Bold(true)
+	// Borders are context rather than the subject, so they sit below both the
+	// amber coastline and the cyan pin in weight as well as in ink precedence.
+	borderStyle = lipgloss.NewStyle().
+			Foreground(lipgloss.AdaptiveColor{Light: "245", Dark: "242"})
 	labelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("245"))
 	valueStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("252"))
 	titleStyle = lipgloss.NewStyle().
@@ -40,3 +47,12 @@ var (
 			Padding(0, 1).
 			Width(PanelWidth - 2)
 )
+
+// inkStyles maps each ink to how it renders. A lookup rather than a chain of
+// comparisons, so a new ink is one line here instead of another branch in
+// colorize.
+var inkStyles = map[canvas.Ink]lipgloss.Style{
+	canvas.InkBorder: borderStyle,
+	canvas.InkLand:   landStyle,
+	canvas.InkPin:    pinStyle,
+}

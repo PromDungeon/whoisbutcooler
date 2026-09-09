@@ -7,8 +7,10 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/PromDungeon/whoisbutcooler/internal/canvas"
 	"github.com/PromDungeon/whoisbutcooler/internal/geo"
 	"github.com/PromDungeon/whoisbutcooler/internal/lookup"
+	"github.com/PromDungeon/whoisbutcooler/internal/world"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 )
@@ -352,5 +354,78 @@ func TestTheExportedResultHookIsNotDroppedAsStale(t *testing.T) {
 	next, _ := m.Update(m.Result(fullResult()))
 	if next.(Model).res == nil {
 		t.Fatal("the finished result was dropped as stale")
+	}
+}
+
+// countBraille counts the braille glyphs in a rendered frame, ignoring the
+// panel, borders and help text around the map.
+func countBraille(frame string) int {
+	n := 0
+	for _, r := range frame {
+		if r >= 0x2801 && r <= 0x28FF {
+			n++
+		}
+	}
+	return n
+}
+
+func TestBordersAppearExactlyAtTheZoomGate(t *testing.T) {
+	// Comparing two viewports a thousandth of a degree apart isolates the
+	// borders: the coastline they render is identical at both spans, so any
+	// difference in ink is the border layer switching on. A wider comparison
+	// would confound borders with the different coastline a different zoom
+	// shows.
+	m := sized(New(nil, ""), 120, 34)
+	centre := geo.Viewport{CenterLat: 50, CenterLon: 10}
+
+	on := centre
+	on.LonSpan = world.BorderMaxSpan
+	m.view = on
+	inked := countBraille(m.View())
+
+	off := centre
+	off.LonSpan = world.BorderMaxSpan + 0.001
+	m.view = off
+	bare := countBraille(m.View())
+
+	if inked <= bare {
+		t.Fatalf("no extra ink at the gate: %d inked at LonSpan %v, %d just above it",
+			inked, world.BorderMaxSpan, bare)
+	}
+}
+
+func TestBordersAreAbsentFromTheWorldView(t *testing.T) {
+	m := sized(New(nil, ""), 120, 34)
+	m.view = geo.World()
+	withUI := countBraille(m.View())
+
+	mapW, mapH := m.mapCells()
+	c := canvas.New(mapW, mapH)
+	world.Draw(c, m.view)
+	coastOnly := 0
+	for _, row := range c.Render() {
+		coastOnly += countBraille(row)
+	}
+
+	if withUI != coastOnly {
+		t.Fatalf("world view drew %d glyphs, coastline alone draws %d — borders leaked past the gate",
+			withUI, coastOnly)
+	}
+}
+
+func TestEveryInkHasItsOwnStyle(t *testing.T) {
+	// Test colors, not appearance: lipgloss renders styles identically when
+	// the profile has no color, which it does under `go test`, so a rendered
+	// frame cannot tell these apart.
+	for _, ink := range []canvas.Ink{canvas.InkBorder, canvas.InkLand, canvas.InkPin} {
+		if _, ok := inkStyles[ink]; !ok {
+			t.Errorf("ink %v has no style", ink)
+		}
+	}
+	if inkStyles[canvas.InkBorder].GetForeground() == inkStyles[canvas.InkLand].GetForeground() {
+		t.Error("borders and coastline share a color, so a border is indistinguishable from a shoreline")
+	}
+	if inkStyles[canvas.InkBorder].GetForeground() == inkStyles[canvas.InkPin].GetForeground() {
+		t.Error("borders and the pin share a color")
 	}
 }

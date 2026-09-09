@@ -328,6 +328,10 @@ func (m Model) mapCells() (int, int) {
 func (m Model) View() string {
 	mapW, mapH := m.mapCells()
 	c := canvas.New(mapW, mapH)
+	// Borders first, as the background layer. Order does not affect color —
+	// the canvas keeps the highest ink per cell either way — but it matches
+	// how the map reads.
+	world.DrawBorders(c, m.view)
 	world.Draw(c, m.view)
 	if m.res != nil {
 		world.DrawPin(c, m.view, m.res.Lat, m.res.Lon)
@@ -375,11 +379,12 @@ func colorize(c *canvas.Canvas) []string {
 				continue
 			}
 			seg := string(runes[start:x])
-			if c.InkAt(start, y) == canvas.InkPin {
-				b.WriteString(pinStyle.Render(seg))
-			} else {
-				b.WriteString(landStyle.Render(seg))
+			style, ok := inkStyles[c.InkAt(start, y)]
+			if !ok {
+				// InkNone: the run is blank, so the style never shows.
+				style = landStyle
 			}
+			b.WriteString(style.Render(seg))
 			start = x
 		}
 		out[y] = b.String()
