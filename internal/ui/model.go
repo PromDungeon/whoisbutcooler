@@ -133,6 +133,18 @@ func (m Model) beginLookup(q string, submitted bool) Model {
 	return m
 }
 
+// startLookup advances the model into its "a lookup is running" state and
+// returns the command that will run it. The two are returned together
+// deliberately: doLookup captures the model's sequence and context, so building
+// the command from a model that beginLookup has not yet advanced hands back a
+// result stamped with a superseded sequence, which applyLookup drops. The UI
+// then sits on "Looking up…" forever. Returning both from one call is what
+// makes that ordering impossible to get wrong.
+func (m Model) startLookup(q string, submitted bool) (Model, tea.Cmd) {
+	m = m.beginLookup(q, submitted)
+	return m, m.doLookup(q)
+}
+
 // doLookup runs the query off the render goroutine so the UI stays responsive.
 func (m Model) doLookup(query string) tea.Cmd {
 	client, ctx, seq := m.client, m.ctx, m.seq
@@ -252,7 +264,7 @@ func (m Model) handleMapKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "r":
 		if m.lastQuery != "" {
 			q := m.lastQuery
-			return m.beginLookup(q, false), m.doLookup(q)
+			return m.startLookup(q, false)
 		}
 	}
 	return m, nil
@@ -265,7 +277,7 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		if q == "" {
 			return m, nil
 		}
-		return m.beginLookup(q, true), m.doLookup(q)
+		return m.startLookup(q, true)
 
 	case tea.KeyUp:
 		if m.histIdx > 0 {

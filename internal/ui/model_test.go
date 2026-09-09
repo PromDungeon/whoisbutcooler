@@ -1,8 +1,10 @@
 package ui
 
 import (
+	"context"
 	"errors"
 	"math"
+	"net/netip"
 	"slices"
 	"strings"
 	"testing"
@@ -427,5 +429,71 @@ func TestEveryInkHasItsOwnStyle(t *testing.T) {
 	}
 	if inkStyles[canvas.InkBorder].GetForeground() == inkStyles[canvas.InkPin].GetForeground() {
 		t.Error("borders and the pin share a color")
+	}
+}
+
+// stubGeo answers without a network, but only if it is handed a usable
+// context — a nil or already-cancelled one is exactly what a lookup started
+// against a superseded model would carry.
+type stubGeo struct{}
+
+func (stubGeo) Name() string { return primaryProvider }
+func (stubGeo) Fetch(ctx context.Context, _ netip.Addr) (*lookup.GeoData, error) {
+	if ctx == nil {
+		return nil, errors.New("nil context")
+	}
+	if err := ctx.Err(); err != nil {
+		return nil, err
+	}
+	return &lookup.GeoData{Lat: 37.34, Lon: -121.89, City: "San Jose"}, nil
+}
+
+func offlineClient() *lookup.Client {
+	return &lookup.Client{Geo: []lookup.GeoProvider{stubGeo{}}}
+}
+
+// runCmd executes a tea.Cmd and returns the message it produced.
+func runCmd(t *testing.T, cmd tea.Cmd) tea.Msg {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("no command was returned, so no lookup was ever started")
+	}
+	return cmd()
+}
+
+func TestEnterActuallyDeliversItsResult(t *testing.T) {
+	// The command-line path works because New assigns beginLookup's result
+	// before Init reads it. Enter returns both values from one statement, so
+	// whether the command sees the updated model is a question of evaluation
+	// order — and getting it wrong strands the UI on "Looking up…" forever,
+	// with the result silently dropped as stale.
+	m := sized(New(offlineClient(), ""), 120, 34)
+	m.input.SetValue("8.8.8.8")
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	after := next.(Model)
+
+	done, _ := after.Update(runCmd(t, cmd))
+	got := done.(Model)
+
+	if got.res == nil {
+		t.Fatalf("the lookup never landed; status is still %q", got.status)
+	}
+	if got.res.City != "San Jose" {
+		t.Fatalf("City = %q", got.res.City)
+	}
+}
+
+func TestRetryActuallyDeliversItsResult(t *testing.T) {
+	// Same shape as Enter, same hazard.
+	m := sized(New(offlineClient(), "8.8.8.8"), 120, 34)
+	m.focus = focusMap
+
+	next, cmd := m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'r'}})
+	after := next.(Model)
+
+	done, _ := after.Update(runCmd(t, cmd))
+	if got := done.(Model); got.res == nil {
+		t.Fatalf("the retry never landed; status is still %q", got.status)
 	}
 }
