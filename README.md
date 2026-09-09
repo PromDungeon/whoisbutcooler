@@ -29,8 +29,9 @@ rdap.org for the registry record, both over HTTPS. If ipwho.is is unreachable,
 geolocation falls back to [ip-api.com](https://ip-api.com), whose free tier has no TLS
 — that request, and the address in it, cross the network in cleartext. The fallback is
 never silent: whenever it answers, the status line says so, in the same frame as the
-result. Private and reserved addresses are rejected locally and never leave the
-machine.
+result. Private and reserved addresses are rejected locally, before either
+provider is called. A hostname is resolved first, so its DNS lookup still goes
+out even when it turns out to point somewhere private.
 
 ## Usage
 
