@@ -4,6 +4,7 @@ package lookup
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"net/netip"
 	"time"
@@ -59,4 +60,24 @@ type GeoProvider interface {
 // pin a spinner forever.
 const requestTimeout = 5 * time.Second
 
-func defaultHTTPClient() *http.Client { return &http.Client{Timeout: requestTimeout} }
+func defaultHTTPClient() *http.Client {
+	return &http.Client{Timeout: requestTimeout, CheckRedirect: refuseSchemeDowngrade}
+}
+
+// maxRedirects matches net/http's own default cap.
+const maxRedirects = 10
+
+// refuseSchemeDowngrade stops a request that began over TLS from being walked
+// off it by a redirect. Choosing an HTTPS provider is pointless if a redirect
+// can silently downgrade the connection, and Go follows one by default. A
+// request that started in cleartext — ip-api's free tier has no TLS — is left
+// alone, since there is nothing left to give away.
+func refuseSchemeDowngrade(req *http.Request, via []*http.Request) error {
+	if len(via) >= maxRedirects {
+		return fmt.Errorf("stopped after %d redirects", maxRedirects)
+	}
+	if len(via) > 0 && via[0].URL.Scheme == "https" && req.URL.Scheme != "https" {
+		return fmt.Errorf("refusing redirect from https to %s://%s", req.URL.Scheme, req.URL.Host)
+	}
+	return nil
+}

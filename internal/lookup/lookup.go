@@ -123,7 +123,30 @@ func (c *Client) fetchGeo(ctx context.Context, addr netip.Addr) (*GeoData, strin
 // isUnlocatable reports addresses that no public database can place. Catching
 // them locally avoids a pointless round trip and a confusing empty answer.
 func isUnlocatable(a netip.Addr) bool {
-	return !a.IsValid() || a.IsPrivate() || a.IsLoopback() ||
+	if !a.IsValid() || a.IsPrivate() || a.IsLoopback() ||
 		a.IsLinkLocalUnicast() || a.IsLinkLocalMulticast() ||
-		a.IsMulticast() || a.IsUnspecified() || a.IsInterfaceLocalMulticast()
+		a.IsMulticast() || a.IsUnspecified() || a.IsInterfaceLocalMulticast() {
+		return true
+	}
+	a = a.Unmap()
+	for _, p := range reservedPrefixes {
+		if p.Contains(a) {
+			return true
+		}
+	}
+	return false
+}
+
+// reservedPrefixes are ranges netip has no predicate for that are still not
+// globally routable, so no public database can place them.
+var reservedPrefixes = []netip.Prefix{
+	netip.MustParsePrefix("100.64.0.0/10"),   // carrier-grade NAT, RFC 6598
+	netip.MustParsePrefix("192.0.0.0/24"),    // IETF protocol assignments
+	netip.MustParsePrefix("192.0.2.0/24"),    // TEST-NET-1
+	netip.MustParsePrefix("198.18.0.0/15"),   // benchmarking, RFC 2544
+	netip.MustParsePrefix("198.51.100.0/24"), // TEST-NET-2
+	netip.MustParsePrefix("203.0.113.0/24"),  // TEST-NET-3
+	netip.MustParsePrefix("240.0.0.0/4"),     // reserved, and 255.255.255.255 with it
+	netip.MustParsePrefix("2001:db8::/32"),   // IPv6 documentation
+	netip.MustParsePrefix("100::/64"),        // IPv6 discard-only
 }

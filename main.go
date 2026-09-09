@@ -10,6 +10,7 @@ import (
 	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/mattn/go-isatty"
 
 	"github.com/PromDungeon/whoisbutcooler/internal/lookup"
 	"github.com/PromDungeon/whoisbutcooler/internal/ui"
@@ -98,7 +99,8 @@ func renderOnce(client *lookup.Client, query string) error {
 	}
 	m := ui.New(client, query)
 	sized, _ := m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	final, _ := sized.(ui.Model).Update(ui.LookupResult(res))
+	ready := sized.(ui.Model)
+	final, _ := ready.Update(ready.Result(res))
 	fmt.Println(final.(ui.Model).View())
 	return nil
 }
@@ -106,9 +108,5 @@ func renderOnce(client *lookup.Client, query string) error {
 // isTerminal reports whether f is a character device. Checking the file mode
 // keeps the dependency list to the standard library.
 func isTerminal(f *os.File) bool {
-	info, err := f.Stat()
-	if err != nil {
-		return false
-	}
-	return info.Mode()&os.ModeCharDevice != 0
+	return isatty.IsTerminal(f.Fd()) || isatty.IsCygwinTerminal(f.Fd())
 }

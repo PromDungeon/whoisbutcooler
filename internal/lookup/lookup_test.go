@@ -189,3 +189,63 @@ func TestLookupRejectsEmptyQuery(t *testing.T) {
 		t.Fatal("expected an error for a blank query")
 	}
 }
+
+func TestLookupRejectsReservedRangesWithoutCallingProviders(t *testing.T) {
+	// Beyond RFC1918: these are all non-globally-routable, so no public
+	// database can place them and asking one only leaks the query.
+	hits := 0
+	c := testClient(stubGeo{name: "stub", data: &GeoData{}, hits: &hits})
+	for _, addr := range []string{
+		"100.64.0.1",      // CGNAT, RFC 6598
+		"192.0.2.1",       // TEST-NET-1
+		"198.51.100.1",    // TEST-NET-2
+		"203.0.113.1",     // TEST-NET-3
+		"198.18.0.1",      // benchmarking, RFC 2544
+		"240.0.0.1",       // reserved, class E
+		"255.255.255.255", // limited broadcast
+		"2001:db8::1",     // IPv6 documentation
+	} {
+		if _, err := c.Lookup(context.Background(), addr); !errors.Is(err, ErrPrivateRange) {
+			t.Errorf("Lookup(%q) err = %v, want ErrPrivateRange", addr, err)
+		}
+	}
+	if hits != 0 {
+		t.Fatalf("provider was called %d times for reserved addresses", hits)
+	}
+}
+
+func TestRefuseSchemeDowngrade(t *testing.T) {
+	secure := httptest.NewRequest(http.MethodGet, "https://start.example/a", nil)
+	plain := httptest.NewRequest(http.MethodGet, "http://elsewhere.example/b", nil)
+
+	// The whole reason ipwho.is is the primary is that it serves over TLS.
+	// Silently following a redirect off TLS would give that away.
+	if err := refuseSchemeDowngrade(plain, []*http.Request{secure}); err == nil {
+		t.Error("an https -> http redirect was allowed")
+	}
+	if err := refuseSchemeDowngrade(httptest.NewRequest(http.MethodGet, "https://next.example/c", nil),
+		[]*http.Request{secure}); err != nil {
+		t.Errorf("an https -> https redirect was refused: %v", err)
+	}
+	// ip-api's free tier is HTTP-only, so it legitimately starts in cleartext.
+	if err := refuseSchemeDowngrade(plain, []*http.Request{plain}); err != nil {
+		t.Errorf("an http -> http redirect was refused: %v", err)
+	}
+}
+
+func TestRefuseSchemeDowngradeCapsRedirectChains(t *testing.T) {
+	secure := httptest.NewRequest(http.MethodGet, "https://start.example/a", nil)
+	via := make([]*http.Request, 10)
+	for i := range via {
+		via[i] = secure
+	}
+	if err := refuseSchemeDowngrade(secure, via); err == nil {
+		t.Fatal("a 10-hop redirect chain was allowed to continue")
+	}
+}
+
+func TestDefaultHTTPClientWiresTheRedirectGuard(t *testing.T) {
+	if defaultHTTPClient().CheckRedirect == nil {
+		t.Fatal("defaultHTTPClient left CheckRedirect nil, so redirects are unguarded")
+	}
+}

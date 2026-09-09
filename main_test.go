@@ -1,6 +1,7 @@
 package main
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -58,5 +59,30 @@ func TestRenderOnceExplainsAPrivateAddressLikeThePrompt(t *testing.T) {
 	}
 	if strings.HasPrefix(err.Error(), "192.168.1.1:") {
 		t.Errorf("--once message = %q, want no raw wrapped error", err)
+	}
+}
+
+func TestDevNullIsNotATerminal(t *testing.T) {
+	// /dev/null is a character device, so a mode check alone calls it a
+	// terminal — and `whoisbutcooler > /dev/null` then launches the
+	// interactive TUI into the void instead of taking the --once path.
+	f, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	if err != nil {
+		t.Skipf("cannot open %s: %v", os.DevNull, err)
+	}
+	defer f.Close()
+	if isTerminal(f) {
+		t.Fatalf("%s reported as a terminal", os.DevNull)
+	}
+}
+
+func TestRegularFileIsNotATerminal(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "out")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer f.Close()
+	if isTerminal(f) {
+		t.Fatal("a regular file reported as a terminal")
 	}
 }

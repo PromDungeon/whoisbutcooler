@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"math"
 	"slices"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"github.com/PromDungeon/whoisbutcooler/internal/geo"
 	"github.com/PromDungeon/whoisbutcooler/internal/lookup"
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 func sized(m Model, w, h int) Model {
@@ -264,5 +266,91 @@ func TestRetryDoesNotClobberInProgressTyping(t *testing.T) {
 	// sitting unsubmitted at the prompt.
 	if got := retried.(Model).lastQuery; got != "8.8.8.8" {
 		t.Errorf("lastQuery = %q, want the last submitted query", got)
+	}
+}
+
+// minFrameWidth is the narrowest frame the layout can produce: mapCells floors
+// the map at 10 cells, and the panel is a fixed PanelWidth beside it. Below
+// this the frame cannot shrink further, so the invariant only binds above it.
+const minFrameWidth = 10 + PanelWidth
+
+func TestNoRenderedLineExceedsTheTerminalWidth(t *testing.T) {
+	// The help line is a fixed 63 columns. Anything narrower than that and
+	// wider than the layout minimum used to push the whole frame off screen.
+	for _, w := range []int{minFrameWidth, 50, 60, 62, 63, 100} {
+		m := sized(New(nil, ""), w, 20)
+		for i, line := range strings.Split(m.View(), "\n") {
+			if got := lipgloss.Width(line); got > w {
+				t.Errorf("terminal %d cols: line %d renders %d cols", w, i, got)
+			}
+		}
+	}
+}
+
+func TestAStaleResultDoesNotOverwriteANewerOne(t *testing.T) {
+	// Lookups run off the render goroutine with no ordering guarantee, so a
+	// slow earlier query can return after a fast later one. Whichever arrives
+	// last used to win, silently showing the user the wrong address.
+	m := sized(New(nil, ""), 120, 34)
+	m = m.beginLookup("1.1.1.1", true)
+	stale := m.seq
+	m = m.beginLookup("8.8.8.8", true)
+
+	fresh := fullResult()
+	fresh.City = "San Jose"
+	old := fullResult()
+	old.City = "Brisbane"
+
+	next, _ := m.Update(lookupMsg{seq: m.seq, res: fresh})
+	next, _ = next.(Model).Update(lookupMsg{seq: stale, res: old})
+
+	if got := next.(Model).res.City; got != "San Jose" {
+		t.Fatalf("a superseded lookup overwrote the current one: showing %q", got)
+	}
+}
+
+func TestAStaleErrorDoesNotClobberANewerResult(t *testing.T) {
+	m := sized(New(nil, ""), 120, 34)
+	m = m.beginLookup("1.1.1.1", true)
+	stale := m.seq
+	m = m.beginLookup("8.8.8.8", true)
+
+	next, _ := m.Update(lookupMsg{seq: m.seq, res: fullResult()})
+	next, _ = next.(Model).Update(lookupMsg{seq: stale, err: errors.New("timed out")})
+
+	got := next.(Model)
+	if got.isError {
+		t.Fatalf("a superseded error was surfaced: %q", got.status)
+	}
+	if got.res == nil {
+		t.Fatal("a superseded error cleared the current result")
+	}
+}
+
+func TestSupersedingALookupCancelsTheOneItReplaced(t *testing.T) {
+	// Dropping a stale result stops it being shown, but the request behind it
+	// keeps running and holding a connection until its own timeout. Quitting
+	// mid-lookup leaked it the same way.
+	m := sized(New(nil, ""), 120, 34)
+	m = m.beginLookup("1.1.1.1", true)
+	first := m.ctx
+	m = m.beginLookup("8.8.8.8", true)
+
+	select {
+	case <-first.Done():
+	default:
+		t.Fatal("the superseded lookup's context was not cancelled")
+	}
+}
+
+func TestTheExportedResultHookIsNotDroppedAsStale(t *testing.T) {
+	// The one-shot renderer drives the model by hand: New starts a lookup,
+	// then the finished result is handed back through the exported hook. If
+	// that message does not carry the model's current sequence, the staleness
+	// filter treats it as superseded and --once prints an empty panel.
+	m := sized(New(nil, "8.8.8.8"), 120, 34)
+	next, _ := m.Update(m.Result(fullResult()))
+	if next.(Model).res == nil {
+		t.Fatal("the finished result was dropped as stale")
 	}
 }

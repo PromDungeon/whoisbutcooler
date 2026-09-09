@@ -32,14 +32,22 @@ const (
 
 // lookupMsg carries a finished lookup back to the update loop.
 type lookupMsg struct {
+	// seq identifies which lookup produced this. Results arrive in whatever
+	// order the network returns them, so a slow earlier query can land after
+	// a fast later one; without this the last arrival would win and quietly
+	// show the user a different address than the one they asked about.
+	seq int
 	res *lookup.Result
 	err error
 }
 
-// LookupResult wraps a completed lookup as a message, so callers outside the
-// package (the one-shot renderer) can drive the model without running a full
-// Bubble Tea program.
-func LookupResult(res *lookup.Result) tea.Msg { return lookupMsg{res: res} }
+// Result wraps a completed lookup as a message this model will accept,
+// stamped with its current sequence. The one-shot renderer drives the model
+// by hand rather than running a Bubble Tea program, so it has no other way to
+// hand a finished lookup back without the staleness filter discarding it.
+func (m Model) Result(res *lookup.Result) tea.Msg {
+	return lookupMsg{seq: m.seq, res: res}
+}
 
 // Model is the whole application state.
 type Model struct {
@@ -54,6 +62,13 @@ type Model struct {
 
 	history []string
 	histIdx int
+
+	// seq counts lookups so a superseded one can be recognised on arrival;
+	// cancel stops the request behind it rather than leaving it to run out
+	// its own timeout holding a connection.
+	seq    int
+	ctx    context.Context
+	cancel context.CancelFunc
 
 	focus     focusArea
 	lastQuery string
@@ -103,6 +118,11 @@ func (m Model) Init() tea.Cmd {
 // the ring, on a keystroke the user aimed at the map, so wiping whatever they
 // had half-typed at the prompt would be destroying input they never submitted.
 func (m Model) beginLookup(q string, submitted bool) Model {
+	if m.cancel != nil {
+		m.cancel()
+	}
+	m.seq++
+	m.ctx, m.cancel = context.WithCancel(context.Background())
 	if submitted {
 		m.history = append(m.history, q)
 		m.histIdx = len(m.history)
@@ -115,13 +135,13 @@ func (m Model) beginLookup(q string, submitted bool) Model {
 
 // doLookup runs the query off the render goroutine so the UI stays responsive.
 func (m Model) doLookup(query string) tea.Cmd {
-	client := m.client
+	client, ctx, seq := m.client, m.ctx, m.seq
 	return func() tea.Msg {
 		if client == nil {
-			return lookupMsg{err: errors.New("no lookup client configured")}
+			return lookupMsg{seq: seq, err: errors.New("no lookup client configured")}
 		}
-		res, err := client.Lookup(context.Background(), query)
-		return lookupMsg{res: res, err: err}
+		res, err := client.Lookup(ctx, query)
+		return lookupMsg{seq: seq, res: res, err: err}
 	}
 }
 
@@ -156,6 +176,11 @@ func ErrorMessage(err error) string {
 }
 
 func (m Model) applyLookup(msg lookupMsg) Model {
+	// A result from a lookup the user has already replaced is not news, and
+	// its error is not their error either.
+	if msg.seq != m.seq {
+		return m
+	}
 	if msg.err != nil {
 		m.isError = true
 		m.status = ErrorMessage(msg.err)
@@ -176,7 +201,7 @@ func (m Model) applyLookup(msg lookupMsg) Model {
 
 func (m Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if msg.Type == tea.KeyCtrlC {
-		return m, tea.Quit
+		return m, m.quit()
 	}
 	if msg.Type == tea.KeyTab {
 		// Blur returns nothing while Focus returns a command, so these two
@@ -202,7 +227,7 @@ func (m Model) handleMapKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	switch msg.String() {
 	case "q":
-		return m, tea.Quit
+		return m, m.quit()
 	case "esc":
 		m.focus = focusInput
 		return m, m.input.Focus()
@@ -273,6 +298,15 @@ func (m Model) handleInputKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
+// quit cancels any lookup still running so its goroutine and connection are
+// released now rather than when the request times out.
+func (m Model) quit() tea.Cmd {
+	if m.cancel != nil {
+		m.cancel()
+	}
+	return tea.Quit
+}
+
 // mapDots returns the map area in dots.
 func (m Model) mapDots() (int, int) {
 	w, h := m.mapCells()
@@ -314,7 +348,9 @@ func (m Model) View() string {
 		style = warnStyle
 	}
 
-	help := "tab focus · ←↑↓→/hjkl pan · +/- zoom · 0 fit · r retry · q quit"
+	// The help line is wider than a narrow terminal, and a line wider than the
+	// screen pushes the whole frame out of shape rather than just itself.
+	help := truncate("tab focus · ←↑↓→/hjkl pan · +/- zoom · 0 fit · r retry · q quit", m.w)
 
 	return strings.Join([]string{
 		m.input.View(),
