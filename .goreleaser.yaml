@@ -1,16 +1,36 @@
 version: 2
+
 before:
   hooks:
     - go mod tidy
+
 builds:
   - env: [CGO_ENABLED=0]
     goos: [linux, darwin, windows]
     goarch: [amd64, arm64]
+    # -trimpath keeps build machine paths out of the binary, and the stamped
+    # version is what `whoisbutcooler --version` reports. Without the -X the
+    # flag defaults to "dev" and a release would not know what it was.
+    flags:
+      - -trimpath
+    ldflags:
+      - -s -w -X main.version={{ .Version }}
+    # Reproducible builds: without this the archive mtimes are "now", so two
+    # builds of the same tag differ.
+    mod_timestamp: "{{ .CommitTimestamp }}"
+
 archives:
   - formats: [tar.gz]
+    # Windows has no tar by default before Windows 10 1803 and no gzip in
+    # Explorer at all, so a .tar.gz is a worse download there than a zip.
+    format_overrides:
+      - goos: windows
+        formats: [zip]
     name_template: "{{ .ProjectName }}_{{ .Os }}_{{ .Arch }}"
+
 checksum:
   name_template: checksums.txt
+
 changelog:
   sort: asc
   filters:

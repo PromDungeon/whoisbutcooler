@@ -21,17 +21,30 @@ const usage = `whoisbutcooler — IP lookups on a map
   whoisbutcooler              open the interactive prompt
   whoisbutcooler <ip|host>    look it up, then stay interactive
   whoisbutcooler --once <ip>  render one frame and exit
+  whoisbutcooler --version    print the version and exit
 
 Piping output implies --once, since there is nobody to type at a prompt.`
 
-// errHelp is not a failure, so it exits zero and prints to stdout.
-var errHelp = errors.New("help requested")
+// errHelp and errVersion are not failures, so they exit zero and print to
+// stdout rather than going down the usage-and-exit-2 path.
+var (
+	errHelp    = errors.New("help requested")
+	errVersion = errors.New("version requested")
+)
+
+// version is stamped at release time with -X main.version. "dev" rather than
+// empty so an unstamped build says what it is instead of printing nothing.
+var version = "dev"
 
 func main() {
 	stdoutIsTTY := isTerminal(os.Stdout)
 	query, once, err := parseArgs(os.Args[1:], stdoutIsTTY)
 	if errors.Is(err, errHelp) {
 		fmt.Println(usage)
+		return
+	}
+	if errors.Is(err, errVersion) {
+		fmt.Println(version)
 		return
 	}
 	if err != nil {
@@ -67,6 +80,8 @@ func parseArgs(args []string, stdoutIsTTY bool) (query string, once bool, err er
 			once = true
 		case "-h", "--help":
 			return "", false, errHelp
+		case "--version":
+			return "", false, errVersion
 		default:
 			if len(a) > 0 && a[0] == '-' {
 				return "", false, fmt.Errorf("unknown flag %q", a)

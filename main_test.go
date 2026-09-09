@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -84,5 +85,31 @@ func TestRegularFileIsNotATerminal(t *testing.T) {
 	defer f.Close()
 	if isTerminal(f) {
 		t.Fatal("a regular file reported as a terminal")
+	}
+}
+
+func TestParseArgsReportsAVersionRequest(t *testing.T) {
+	// --version is not a failure, so it cannot come back as a plain error the
+	// way an unknown flag does: main has to tell the two apart to exit zero.
+	if _, _, err := parseArgs([]string{"--version"}, true); !errors.Is(err, errVersion) {
+		t.Fatalf("err = %v, want errVersion", err)
+	}
+}
+
+func TestParseArgsDoesNotMistakeVersionForAQuery(t *testing.T) {
+	// A bare word is taken as the query, so --version must be recognised as a
+	// flag before that happens, and must not collide with a real lookup.
+	q, _, err := parseArgs([]string{"--version", "8.8.8.8"}, true)
+	if !errors.Is(err, errVersion) {
+		t.Fatalf("err = %v, want errVersion (got query %q)", err, q)
+	}
+}
+
+func TestVersionHasADefaultForLdflagsToOverwrite(t *testing.T) {
+	// goreleaser stamps this with -X main.version. An empty default would make
+	// an unstamped build print nothing at all rather than saying it is a
+	// development build.
+	if version == "" {
+		t.Fatal("version is empty")
 	}
 }
