@@ -40,6 +40,31 @@ release:
   header: |
     {{ .TagBody }}
 
+homebrew_casks:
+  # Publishes to github.com/PromDungeon/homebrew-tap on every release, so
+  # `brew install PromDungeon/tap/whoisbutcooler` works. Homebrew strips the
+  # `homebrew-` prefix when resolving a tap name.
+  #
+  # A cask rather than a formula because this ships a prebuilt binary, which is
+  # what Homebrew now wants casks for — goreleaser deprecated `brews:` to match.
+  # A personal tap allows that; homebrew-core would insist on building from
+  # source, which is one more reason core is not the route here.
+  - repository:
+      owner: PromDungeon
+      name: homebrew-tap
+    directory: Casks
+    homepage: https://github.com/PromDungeon/whoisbutcooler
+    description: IP lookups on a braille world map, with a seven-line summary instead of raw whois
+    license: MIT
+    binaries:
+      - whoisbutcooler
+    hooks:
+      post:
+        install: |
+          if system_command("/usr/bin/xattr", args: ["-h"]).exit_status == 0
+            system_command "/usr/bin/xattr", args: ["-dr", "com.apple.quarantine", "#{staged_path}/whoisbutcooler"]
+          end
+
 changelog:
   sort: asc
   filters:
