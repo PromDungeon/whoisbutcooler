@@ -103,3 +103,8 @@ threshold, so in practice you see them whenever there is something to see.
 
 Raw `whois` passthrough, bulk or batch lookups, live traffic monitoring, and offline
 operation are all out of scope. If you need the full record, use `whois`.
+
+## Licence
+
+MIT — see [LICENSE](LICENSE). The embedded map data is Natural Earth, which is
+public domain and carries no attribution requirement of its own.
