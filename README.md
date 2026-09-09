@@ -14,13 +14,40 @@ graphics protocol support.
 
 ## Install
 
+Grab a prebuilt binary from the
+[latest release](https://github.com/PromDungeon/whoisbutcooler/releases/latest) — macOS,
+Linux and Windows, on both Intel and ARM, no Go toolchain needed. Unpack it and put
+`whoisbutcooler` anywhere on your `PATH`:
+
+```sh
+tar xzf whoisbutcooler_darwin_arm64.tar.gz
+mv whoisbutcooler ~/go/bin/
+```
+
+Windows archives are `.zip` rather than `.tar.gz`. Every release also ships a
+`checksums.txt`, so you can check what you downloaded is what was built:
+
+```sh
+shasum -a 256 -c checksums.txt --ignore-missing
+```
+
+Or build it from source, which needs Go 1.25 or later:
+
 ```sh
 go install github.com/PromDungeon/whoisbutcooler@latest
 ```
 
-Requires Go 1.25 or later. No API key, no signup, no configuration: geolocation comes
-from [ipwho.is](https://ipwho.is) and registry data from [rdap.org](https://rdap.org),
-both free and keyless.
+One wrinkle worth knowing: Go's module proxy caches its answer for `@latest` and can sit
+a release behind for a while after a tag is pushed. Name the version if you want a
+particular one, and `whoisbutcooler --version` will tell you what you ended up with:
+
+```sh
+go install github.com/PromDungeon/whoisbutcooler@v0.1.1
+```
+
+No API key, no signup, no configuration: geolocation comes from
+[ipwho.is](https://ipwho.is) and registry data from [rdap.org](https://rdap.org), both
+free and keyless.
 
 ## Where your query goes
 
