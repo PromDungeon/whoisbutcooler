@@ -6,15 +6,21 @@ summary of the registry data that actually matters — not raw `whois` output.
 
 ## Why
 
-`whois` buries the four facts most people want — where an address is, who runs it,
-what network block it belongs to, and who to email about abuse — under nameservers,
-raw registry timestamps, and a page of legal disclaimer. `whoisbutcooler` shows those
+`whois` buries the four things <em>most</em> people(me) want 95% of the time — 
+
+-<b>where</b> an address is, <br> 
+-<b>who</b> runs it, <br>
+-<b>what</b> network block it belongs to, and , <br> 
+-<b>who</b> to email about abuse — under nameservers,
+raw registry timestamps, and a page of legal disclaimer. 
+
+`whoisbutcooler` shows those
 facts directly, on a map, in any terminal, including a plain SSH session with no
 graphics protocol support.
 
 ## Install
 
-Grab a prebuilt binary from the
+Grab prebuilt binary from the
 [latest release](https://github.com/PromDungeon/whoisbutcooler/releases/latest) — macOS,
 Linux and Windows, on both Intel and ARM, no Go toolchain needed. Unpack it and put
 `whoisbutcooler` anywhere on your `PATH`:
@@ -24,8 +30,8 @@ tar xzf whoisbutcooler_darwin_arm64.tar.gz
 mv whoisbutcooler ~/go/bin/
 ```
 
-Windows archives are `.zip` rather than `.tar.gz`. Every release also ships a
-`checksums.txt`, so you can check what you downloaded is what was built:
+Windows archives are `.zip` rather than `.tar.gz`. Releases ship with a
+`checksums.txt`, so you can make sure I'm not trying to poison you:
 
 ```sh
 shasum -a 256 -c checksums.txt --ignore-missing
@@ -35,14 +41,6 @@ Or build it from source, which needs Go 1.25 or later:
 
 ```sh
 go install github.com/PromDungeon/whoisbutcooler@latest
-```
-
-One wrinkle worth knowing: Go's module proxy caches its answer for `@latest` and can sit
-a release behind for a while after a tag is pushed. Name the version if you want a
-particular one, and `whoisbutcooler --version` will tell you what you ended up with:
-
-```sh
-go install github.com/PromDungeon/whoisbutcooler@v0.1.1
 ```
 
 No API key, no signup, no configuration: geolocation comes from
@@ -68,19 +66,9 @@ whoisbutcooler 8.8.8.8         # look it up immediately, then stay interactive
 whoisbutcooler --once 8.8.8.8  # render a single frame to stdout and exit
 ```
 
-An argument is a starting point, not a one-shot — this is a TUI, so it looks up the
-address and then leaves you at the prompt to look up more. `--once` renders exactly
-one frame and exits instead. Piping or redirecting stdout implies `--once`
-automatically, since there's nobody there to type at an interactive prompt; braille is
-ordinary text, so the output pipes and redirects cleanly with no ANSI escapes. Both
-`--once` and a non-interactive stdout require a query — there's nothing to render and
-no prompt to fall back to otherwise, so that combination exits non-zero with a usage
-message on stderr.
-
 ## Keybindings
 
-Focus alternates between the input prompt and the map, which resolves the collision
-between arrow-key history recall and arrow-key panning.
+Focus alternates between the input prompt and the map.
 
 | Key | Input focused | Map focused |
 | --- | --- | --- |
