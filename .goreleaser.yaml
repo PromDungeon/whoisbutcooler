@@ -31,6 +31,15 @@ archives:
 checksum:
   name_template: checksums.txt
 
+release:
+  # goreleaser fills the release body with the generated changelog and nothing
+  # else, so an annotated tag's message never reaches the page — v0.1.1 shipped
+  # with two commit subjects where the tag explained what the bug actually was.
+  # TagBody is the annotation minus its subject line, which GitHub already shows
+  # as the release title.
+  header: |
+    {{ .TagBody }}
+
 changelog:
   sort: asc
   filters:
