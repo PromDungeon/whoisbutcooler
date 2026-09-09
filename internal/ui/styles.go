@@ -10,15 +10,15 @@ const PanelWidth = 34
 const missing = "—"
 
 var (
-	// Coastline is turquoise: a tertiary hue bright enough to read at braille
+	// Coastline is amber: a tertiary hue bright enough to read at braille
 	// density, and far enough around the wheel from the magenta pin that the
-	// pin still reads as the one thing that matters. The previous slate 60
+	// pin still reads as the one thing that matters. The original slate 60
 	// (#5f5f87) sat barely above a dark terminal background. Adaptive because
 	// a value bright enough for a dark terminal washes out on a light one.
-	// Other tertiary casts, if you want a different look: amber {172, 214},
+	// Other tertiary casts, if you want a different look: turquoise {30, 80},
 	// chartreuse {64, 155}, violet {92, 141}.
 	landStyle = lipgloss.NewStyle().
-			Foreground(lipgloss.AdaptiveColor{Light: "30", Dark: "80"})
+			Foreground(lipgloss.AdaptiveColor{Light: "172", Dark: "214"})
 	pinStyle = lipgloss.NewStyle().
 			Foreground(lipgloss.AdaptiveColor{Light: "162", Dark: "213"}).
 			Bold(true)
